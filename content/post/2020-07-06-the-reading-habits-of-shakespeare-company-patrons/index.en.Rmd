@@ -1,7 +1,7 @@
 ---
 title: "The Reading Habits of Shakespeare & Company Patrons"
 date: '2020-07-06'
-slug: []
+slug: 'the-reading-habits-of-shakespeare-company-patrons'
 categories: []
 tags: []
 type: ''

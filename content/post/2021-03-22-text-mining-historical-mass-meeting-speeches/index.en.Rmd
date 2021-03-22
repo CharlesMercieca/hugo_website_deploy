@@ -2,7 +2,7 @@
 title: "Text Mining Historical Mass Meeting Speeches"
 author: ''
 date: '2021-03-22'
-slug: []
+slug: 'historical-mass-meeting-speeches'
 categories: []
 tags: []
 type: ''

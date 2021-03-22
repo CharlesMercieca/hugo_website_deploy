@@ -2,7 +2,7 @@
 title: "Data Showing the Uptime of the Electrogas Powerstation is Publicly Available"
 author: ''
 date: '2020-01-07'
-slug: []
+slug: 'data-showing-the-uptime-of-the-electrogas-powerstation-is-publicly-available'
 categories: []
 tags: []
 type: ''

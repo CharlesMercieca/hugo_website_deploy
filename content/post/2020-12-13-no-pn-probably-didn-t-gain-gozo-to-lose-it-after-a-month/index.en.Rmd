@@ -2,7 +2,7 @@
 title: "No, PN probably didn’t “gain” Gozo to lose it after a month"
 author: ''
 date: '2020-12-13'
-slug: []
+slug: 'no-pn-probably-didn-t-gain-gozo-to-lose-it-after-a-month'
 categories: []
 tags: []
 type: ''

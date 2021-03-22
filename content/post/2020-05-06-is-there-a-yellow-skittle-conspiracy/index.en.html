@@ -1,7 +1,7 @@
 ---
 title: "Is There a Yellow Skittle Conspiracy?"
 date: '2020-05-06'
-slug: []
+slug: 'is-there-a-yellow-skittle-conspiracy'
 categories: []
 tags: []
 type: ''
@@ -57,33 +57,33 @@ sims &lt;- sims %&gt;% mutate(colour = sample(c(&quot;Yellow&quot;, &quot;Red&qu
 <pre><code>## # A tibble: 6 x 3
 ##     sim skittle colour
 ##   &lt;int&gt;   &lt;int&gt; &lt;chr&gt; 
-## 1     1       1 Orange
+## 1     1       1 Purple
 ## 2     1       2 Purple
-## 3     1       3 Orange
+## 3     1       3 Yellow
 ## 4     1       4 Green 
-## 5     1       5 Green 
-## 6     1       6 Green</code></pre>
+## 5     1       5 Yellow
+## 6     1       6 Red</code></pre>
 <p>To make the data easier to analyse, we can then group by each simulation and colour, and count the number of skittles:</p>
 <pre class="r"><code>gathered &lt;- sims %&gt;%
   group_by(sim, colour) %&gt;%
   summarise(n = n())</code></pre>
 <pre><code>## `summarise()` has grouped output by &#39;sim&#39;. You can override using the `.groups` argument.</code></pre>
 <pre class="r"><code>gathered</code></pre>
-<pre><code>## # A tibble: 499,994 x 3
+<pre><code>## # A tibble: 499,987 x 3
 ## # Groups:   sim [100,000]
 ##      sim colour     n
 ##    &lt;int&gt; &lt;chr&gt;  &lt;int&gt;
-##  1     1 Green     11
+##  1     1 Green     10
 ##  2     1 Orange     7
-##  3     1 Purple    11
-##  4     1 Red        7
-##  5     1 Yellow    14
+##  3     1 Purple    10
+##  4     1 Red       10
+##  5     1 Yellow    13
 ##  6     2 Green      8
-##  7     2 Orange     9
-##  8     2 Purple    12
-##  9     2 Red        5
-## 10     2 Yellow    16
-## # ... with 499,984 more rows</code></pre>
+##  7     2 Orange    10
+##  8     2 Purple    14
+##  9     2 Red       11
+## 10     2 Yellow     7
+## # ... with 499,977 more rows</code></pre>
 <p>The beauty of this approach is that now, we have the ability to plot a probability mass function of the distribution of any skittle colour. So for example, we can draw a histogram of the observed distributions for yellow, together with the mean count of yellow from our observed data (black line):</p>
 <pre class="r"><code>yellowMean &lt;- ObservedSkittlesDistribution %&gt;% 
   filter(Colour == &quot;Yellow&quot;) %&gt;% pull(mean)
@@ -103,7 +103,7 @@ Yellow</code></pre>
 <p>What we can see is that in a perfectly random process, the most common number of yellow skittles is 10, matching with the commonsense probability of 1/5 * 50. Yet, this is only the case for 13,000 bags out of 100,000. In other instances, it can be a bit off to each side, and in some extreme cases, we might have as few as 2 yellow skittles and as many as 20 yellow skittles in a single bag.</p>
 <p>This is also a great visual display of what a p-value really is: the probability of observing a result this extreme given a null distribution. What’s more, to get a p-value out of this, all we’d need to do is count the number of times the mean of yellow skittles we observed (10.5) is greater than the number of times we’d get a bag with 10.5 skittles or more. Or in R terms:</p>
 <pre class="r"><code>sum(yellowMean &gt;= gathered %&gt;% filter(colour == &quot;Yellow&quot;) %&gt;% pull(n))/100000</code></pre>
-<pre><code>## [1] 0.5832</code></pre>
+<pre><code>## [1] 0.58249</code></pre>
 <p>Which tells us that we’d observe a value this extreem in 58% of the cases, even if the skittles factory was completely fair.</p>
 <p>Simulations like these also make it easy to calculate quantiles.</p>
 <pre class="r"><code>gathered %&gt;% 
