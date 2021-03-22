@@ -1,0 +1,286 @@
+---
+title: "Analysing Frasier"
+author: ''
+date: '2019-11-07'
+slug: analysing-frasier
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<p>Frasier is my favourite TV show of all time. I’ve watched the entire series many times over from start to finish. So when I found <a href="https://www.kaggle.com/sulabhbista/frasier-dialogs">a dataset on kaggle</a> with both episode meta-information and the scripts, I knew I had to do a write up on it.</p>
+<div id="who-has-the-most-words" class="section level2">
+<h2>Who has the most words?</h2>
+<p>Frasier is predominantly a character oriented show: nothing very exciting or spectacular happens in terms of plot, and when it does, the emphasis is on how the characters handle and react to often absurd situations. So one way to get a basic idea of what the show is about is to see who has the most air time.</p>
+<p>To do this I’ll use the usual tidytext unnest_tokens() workflow mentioned in other blogposts, so I won’t delve too much in it:</p>
+<pre class="r"><code>CharactersbyWords &lt;- script %&gt;% 
+  unnest_tokens(words, dialog) %&gt;% 
+  group_by(cast) %&gt;% 
+  summarise(totalwords = n()) %&gt;% 
+  top_n(15) %&gt;% 
+  ggplot(aes(fct_reorder(cast, totalwords), totalwords, fill = cast))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(label = comma)+
+  xlab(&quot;&quot;)+
+  ylab(&quot;Total Words in Entire Show&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<pre><code>## Selecting by totalwords</code></pre>
+<pre class="r"><code>CharactersbyWords</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>And predictably, the titular character gets most of the word count, nearly double that of the second place character, Niles.</p>
+</div>
+<div id="tf-idf-what-are-those-words" class="section level2">
+<h2>TF-IDF: What are those words?</h2>
+<p>While a raw count can tell us how many words came out of each character, TF-IDF can tell us which words are more likely to come from one character as opposed to the other.</p>
+<pre class="r"><code>##TF-IDF
+unnested_dialogue_words &lt;- ScriptCleaned %&gt;%
+  unnest_tokens(word, dialog) %&gt;%
+  filter(!is.na(word)) %&gt;% 
+  anti_join(stop_words) %&gt;% 
+  count(cast, word, sort = TRUE)</code></pre>
+<pre><code>## Joining, by = &quot;word&quot;</code></pre>
+<pre class="r"><code>total_words &lt;- ScriptCleaned %&gt;% 
+  group_by(cast) %&gt;% 
+  summarize(total = sum(n()))
+
+dialogue_words &lt;- left_join(unnested_dialogue_words, total_words) </code></pre>
+<pre><code>## Joining, by = &quot;cast&quot;</code></pre>
+<pre class="r"><code>dialogue_words &lt;- dialogue_words %&gt;%
+  filter(n &gt; 30) %&gt;% 
+  bind_tf_idf(word, cast, n) %&gt;%
+  arrange(desc(tf_idf))
+
+plot_tf_idf &lt;- dialogue_words %&gt;%
+  filter(cast %in% c(&quot;Niles&quot;, &quot;Frasier&quot;, &quot;Roz&quot;, &quot;Gil&quot;, &quot;Martin&quot;, &quot;Daphne&quot;, &quot;Bebe&quot;, &quot;Lillith&quot;, &quot;Kenny&quot;, &quot;Bulldog&quot;, &quot;Freddie&quot;)) %&gt;% 
+  group_by(cast) %&gt;%
+  top_n(10, tf_idf) %&gt;%   
+  ungroup() %&gt;%
+  mutate(word = reorder(word, tf_idf)) %&gt;%
+  ggplot(aes(word, tf_idf, fill = cast)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = &quot;TF-IDF Score&quot;, title = &quot;Top 10 TF-IDF Terms&quot;) +
+  facet_wrap(~cast, ncol = 3, scales = &quot;free&quot;) +
+  coord_flip()
+
+plot_tf_idf</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>The results make sense: Bebe, Frasier’s agent, mostly appears speaking to Frasier. So does Freddie, Frasier’s son, who is much more likely to use “dad”. Bulldog and Kenny, Frasier’s coworkers, often greet him with “Hey Doc”, while Daphne is much more likely to opt for “Dr. Crane”, and being from Manchester, more predisposed to use “bloody”.</p>
+<p>Frasier’s trademark radio greeting “I’m Listening Seattle” probably explains his last two tf-idf terms, and Martin is often talking to his sons/boys or his dog Eddie.</p>
+<p>Niles is also much more likely to mention his two ex-wives Maris and Mel and Roz her daughter Alice.</p>
+</div>
+<div id="sentiment-through-the-show" class="section level2">
+<h2>Sentiment through the show</h2>
+<p>Since we had the scripts I thought it would be interesting to compute how much sentiment varies across the episodes.</p>
+<p>It turns out that across the episodes, the variation might be sizeable, but every season seems to have a consistent mean.</p>
+<pre class="r"><code>SentimentAnalysis &lt;- script %&gt;% 
+  mutate(dialog = str_replace(dialog, &quot; *\\[.*?\\] *&quot;, &quot;&quot;)) %&gt;%
+  unnest_tokens(word, dialog) %&gt;% 
+  inner_join(get_sentiments(&quot;afinn&quot;)) %&gt;% 
+  left_join(episode) %&gt;% 
+  select(c(&quot;season&quot;, &quot;episode&quot;, &quot;cast&quot;, &quot;word&quot;, &quot;value&quot;, &quot;Aired_date&quot;, &quot;url&quot;)) %&gt;%
+  group_by(season, episode) %&gt;% 
+  summarise(episode_sentiment = mean(value))</code></pre>
+<pre><code>## Joining, by = &quot;word&quot;</code></pre>
+<pre><code>## Joining, by = &quot;url&quot;</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;season&#39;. You can override using the `.groups` argument.</code></pre>
+<pre class="r"><code>ggplot(SentimentAnalysis, aes(episode, episode_sentiment, col = factor(season)))+
+  geom_point()+
+  geom_smooth(method = &quot;lm&quot;, se = F)+
+  facet_wrap(~season)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<pre><code>## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>This might make sense in terms of arcs within the season. You’d want to generate a mix of emotions in your viewers to make sure they keep tuning in.</p>
+</div>
+<div id="words-per-episode" class="section level2">
+<h2>Words per episode</h2>
+<p>And since we have the unnested script handy, we can see the distribution of words per episode:</p>
+<pre><code>## Joining, by = &quot;url&quot;</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;season&#39;. You can override using the `.groups` argument.</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>Turns out that the mean words per episode are 3,024.</p>
+</div>
+<div id="maris" class="section level2">
+<h2>Maris</h2>
+<p>Maris is probably one of the greatest running gags in all of television. She first appeared in the show as Niles’ insanely rich wife (we later learn, thanks to her family’s urinal cake business). Though at first she probably was uncast as a way to save some money for a new show, producers later said that even if they wanted to cast her, they couldn’t possibly find an actress to fit to the outlandish caricature the writers had devised. So for 11 seasons she goes unseen.</p>
+<iframe width="545" height="409" src="https://www.youtube.com/embed/mriU5oEko-A" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
+</iframe>
+<p>Using Stringr’s str_detect() function, we could easily check whether Maris appeared in an episode or not.</p>
+<pre class="r"><code>##Maris?
+
+Maris &lt;- episode %&gt;% 
+  select(url, season, episode) %&gt;% 
+  left_join(script) %&gt;% 
+  mutate(has_maris = str_detect(dialog, c(&quot;Maris&quot;, &quot;maris&quot;))) %&gt;% 
+  group_by(season, episode) %&gt;% 
+  summarise(CountMaris = sum(has_maris, na.rm = T)) %&gt;% 
+  mutate(HasMaris = if_else(CountMaris &gt; 0, &quot;Yes&quot;, &quot;No&quot;, &quot;No&quot;))</code></pre>
+<pre><code>## Joining, by = &quot;url&quot;</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;season&#39;. You can override using the `.groups` argument.</code></pre>
+<pre class="r"><code>ggplot(Maris, aes(x=episode, y = HasMaris, col = HasMaris))+
+  geom_point()+
+  facet_wrap(~season)+
+  xlab(&quot;Episode&quot;)+
+  ylab(&quot;Is Maris Mentioned?&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>From the looks of things, she featured pretty heavily in the first 6 seasons, then diminishing, before making a few final appearances in season 11 to end her chapter within the show.</p>
+</div>
+<div id="did-lines-per-character-change-across-the-seasons" class="section level2">
+<h2>Did lines per Character change across the seasons?</h2>
+<p>This is a more sophisticated version of the very first graph I plotted in this post. Rather than counting all the words, it counts all the lines in each episode per character. By plotting this over the seasons, we can see if some characters became more important or less important than others.</p>
+<pre class="r"><code>LinesPerEpisode &lt;- script %&gt;% 
+  group_by(url) %&gt;% 
+  count(cast, sort = T) %&gt;% 
+  left_join(episode) %&gt;% 
+  select(season, episode, cast, n) %&gt;% 
+  filter(cast %in% c(&quot;Frasier&quot;, &quot;Niles&quot;, &quot;Martin&quot;, 
+                     &quot;Daphne&quot;, &quot;Roz&quot;))</code></pre>
+<pre><code>## Joining, by = &quot;url&quot;</code></pre>
+<pre><code>## Adding missing grouping variables: `url`</code></pre>
+<pre class="r"><code>ggplot(LinesPerEpisode, aes(x = episode, y = n, color = cast))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(se=F)+
+  facet_wrap(~season)</code></pre>
+<pre><code>## `geom_smooth()` using method = &#39;loess&#39; and formula &#39;y ~ x&#39;</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Frasier almost always gets 80-90 lines per episode for instance, but there are exceptions. The final episode of season 7 and the first episode of season 8 for instance see Daphne and Niles dominating, and fans of the show will realise that these are the two episodes where they got married.</p>
+<p>I think it’s also interesting to note how all of the main characters like Martin or Roz have an episode or two where they get the 2nd highest number of lines. It’s a testament to how much the writers emphasised on character development.</p>
+</div>
+<div id="writers-directors" class="section level2">
+<h2>Writers &amp; Directors</h2>
+<p>Since we also have episode meta data, it would be interesting to see how different writers and directors contributed to the show.</p>
+<p>By terms of sheer volumes, it would look something like this:</p>
+<pre class="r"><code>episode %&gt;% 
+  group_by(writers) %&gt;% 
+  count(sort = T) %&gt;% 
+  head(20) %&gt;% 
+  ggplot(aes(fct_reorder(writers, n), n, fill = writers)) + 
+  geom_col()+
+  coord_flip()+
+  xlab(&quot;Writers&quot;)+
+  ylab(&quot;Number of Episodes&quot;)+
+  labs(title = &quot;20 Most Prolific Frasier Writers&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<pre class="r"><code>episode %&gt;% 
+  group_by(directors) %&gt;% 
+  count(sort = T) %&gt;% 
+  head(20) %&gt;% 
+  ggplot(aes(fct_reorder(directors, n), n, fill = directors)) + 
+  geom_col()+
+  coord_flip()+
+  xlab(&quot;Directors&quot;)+
+  ylab(&quot;Number of Episodes&quot;)+
+  labs(title = &quot;20 Most Prolific Frasier Directors&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-2.png" width="672" /></p>
+<p>But we also have the IMDB ratings of the entire show:</p>
+<pre class="r"><code>ggplot(episode,(aes(imdb_rating)))+
+  geom_histogram(bins = 20)</code></pre>
+<pre><code>## Warning: Removed 6 rows containing non-finite values (stat_bin).</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p>Which means we can be creative and see if any writers or directors contribute to a better IMDB rating. To do this, we’ll turn each director and writer into a column in our dataset, and dummy code with a 1 if he contributed to that episode.</p>
+<p>There are many different ways of doing this, but in this case I’ll use the fastDummies package.</p>
+<pre class="r"><code>categorical_variables &lt;- episode %&gt;%
+  select(url, writers, directors) %&gt;% 
+  fastDummies::dummy_cols(select_columns = c(&quot;writers&quot;, &quot;directors&quot;)) %&gt;% 
+  distinct()</code></pre>
+<p>And just to give you an idea what that looks like, here are the first 5 rows of a tiny slice:</p>
+<pre class="r"><code>head(categorical_variables[4:6])</code></pre>
+<pre><code>## # A tibble: 6 x 3
+##   `writers_Alex Gregory, P~ `writers_Anne Flett-G~ `writers_Anne Flett-Giordano~
+##                       &lt;int&gt;                  &lt;int&gt;                         &lt;int&gt;
+## 1                         0                      0                             0
+## 2                         0                      0                             0
+## 3                         0                      0                             1
+## 4                         0                      0                             0
+## 5                         0                      0                             0
+## 6                         0                      0                             0</code></pre>
+<p>Since there are 34 different directors and 76 different writers, this means we’ve added 110 columns to our dataframe. And since the code for a few additional features (if an episode features Maris, Word count and sentiment) are already done, I’ve decided to appent these as well!</p>
+<p>This part of the data also has our IMDB rating, which will be our predictor variable, and the episode url, which we’ll use to join the categorical and non-categorical data together.</p>
+<pre class="r"><code>noncategorical_variables &lt;- episode %&gt;% 
+  select(url, season, episode, imdb_rating) %&gt;% 
+  left_join(WordsperEpisodeFE) %&gt;% 
+  left_join(SentimentAnalysisFE) %&gt;% 
+  left_join(MarisFE) %&gt;% 
+  distinct()</code></pre>
+<pre><code>## Joining, by = &quot;url&quot;
+## Joining, by = &quot;url&quot;
+## Joining, by = &quot;url&quot;</code></pre>
+<pre class="r"><code>head(noncategorical_variables)</code></pre>
+<pre><code>## # A tibble: 6 x 7
+##   url     season episode imdb_rating WordsperEpisode episode_sentime~ CountMaris
+##   &lt;chr&gt;    &lt;dbl&gt;   &lt;dbl&gt;       &lt;dbl&gt;           &lt;int&gt;            &lt;dbl&gt;      &lt;int&gt;
+## 1 http:/~      1       1         8.6            3325            0.249          4
+## 2 http:/~      1       2         8.1            2916            0.328          0
+## 3 http:/~      1       3         8.2            3364            0.620          5
+## 4 http:/~      1       4         7.9            3252            0.386          2
+## 5 http:/~      1       5         8              3360            0.578          1
+## 6 http:/~      1       6         7.7            3263            0.440          3</code></pre>
+<pre class="r"><code>features &lt;- categorical_variables %&gt;% 
+  left_join(noncategorical_variables) %&gt;% 
+  select(-c(url, writers, directors)) %&gt;% 
+  drop_na()</code></pre>
+<pre><code>## Joining, by = &quot;url&quot;</code></pre>
+<p>After the join, I removed the url, since it’s simply a unique case ID, and the original writers and directors columns, which have now become redundant, because we’re capturing that information through our dummy variables.</p>
+</div>
+<div id="elastic-net-regression" class="section level2">
+<h2>Elastic Net Regression</h2>
+<p>Rather than create a model to predict IMDB ratings, what we want to do is see which features contribute most to that rating score. One powerful statistical method that does this feature selection and handles wide datasets well is elastic net.</p>
+<p>Elastic nets are implemented in R through the glmnet library, but to use that, we’ll have to turn our dataframe into a matrix, and split the target and features into separate matrices, since glmnet does not accept the usual predictor ~ variables formula notation.</p>
+<p>After that’s done, fitting a model is relatively straightforward. We’ll use the cv.glmnet function, which does 10 cross validation folds by default.</p>
+<pre class="r"><code>set.seed(31)
+y &lt;- matrix(features$imdb_rating)
+X &lt;- features %&gt;% select(-imdb_rating) %&gt;% data.matrix()
+
+glmnet_model &lt;- cv.glmnet(X, y, type.measure = &quot;mse&quot;)
+plot(glmnet_model)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>The plot shows us the MSE as glmnet iterates through different values of the regularization parameter lambda. Our mean squared error is between 0.22 and 0.26 IMDB points: which means we’re predicting IMDB ratings that are usually just a quarter of a point off.</p>
+<p>Now comes the really fun part. We can see which features elasticnet decided to penalize because they were unimportant, and conversely, we can see which features were important, and their relative importance.</p>
+<p>And we can graph that out into something like this:</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p>If the coeffecient, or what I named “impact” is positive, it means those variables increase the IMDB score. So episodes written by Christopher Lloyd or Joe Keenan or directed by David Lee tend to get a higher IMDB rating.</p>
+<p>Episodes with higher counts of Maris also are higher rated, although this effect is slight. And, as season gets larger (and we get later into the show), the ratings dip a bit compared to the start.
+Which makes sense when you plot it!</p>
+<pre class="r"><code>ggplot(episode, aes(Aired_date, imdb_rating))+
+  geom_point()+
+  geom_smooth(method = &quot;lm&quot;, se = F)</code></pre>
+<pre><code>## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<pre><code>## Warning: Removed 63 rows containing non-finite values (stat_smooth).</code></pre>
+<pre><code>## Warning: Removed 63 rows containing missing values (geom_point).</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
+<p>And it turns out that Joe Keenan did indeed write some of my favourite episodes of the entire show:</p>
+<pre class="r"><code>episode %&gt;% filter(writers == &quot;Joe Keenan&quot;) %&gt;% select(season, episode, title)</code></pre>
+<pre><code>## # A tibble: 18 x 3
+##    season episode title                                   
+##     &lt;dbl&gt;   &lt;dbl&gt; &lt;chr&gt;                                   
+##  1      2       3 The Matchmaker                          
+##  2      2       6 The Botched Language Of Cranes          
+##  3      2      15 You Scratch My Book...                  
+##  4      2      22 Agents In America, Part Three           
+##  5      3       7 The Adventures of Bad Boy and Dirty Girl
+##  6      3      15 A Word To The Wiseguy                   
+##  7      3      21 Where There&#39;s Smoke There&#39;s Fired       
+##  8      4       1 The Two Mrs. Cranes                     
+##  9      4       9 &lt;NA&gt;                                    
+## 10      4      17 Roz&#39;s Turn                              
+## 11      5      12 The Zoo Story                           
+## 12      5      14 The Ski Lodge                           
+## 13      6       8 The Seal Who Came To Dinner             
+## 14      6      20 Dr. Nora                                
+## 15      7       4 Everyone&#39;s A Critic                     
+## 16      7      15 Out With Dad                            
+## 17     11       3 The Doctor Is Out                       
+## 18     11      15 Caught In The Act</code></pre>
+<p>It probably would be fitting to end a post about Frasier with a clip on some outtakes.</p>
+<iframe width="727" height="409" src="https://www.youtube.com/embed/fyT_UkXYjVA" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
+</iframe>
+<p>I really can’t emphasise enough how great of a show it is, so if you’ve never seen an episode, I’d encourage you to give it a try.</p>
+</div>
