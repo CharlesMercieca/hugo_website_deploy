@@ -18,7 +18,7 @@ Params:
     - post
     - posts
   readingTime: yes
-  rss: yes
+  #rss: yes
   showRelatedPosts: yes
   socialShare: yes
   #subtitle: Build a beautiful and simple website in minutes
@@ -36,7 +36,4 @@ menu:
       weight: 1
     - name: About
       url: page/about/
-      weight: 3
-    - name: Tags
-      url: tags
       weight: 3

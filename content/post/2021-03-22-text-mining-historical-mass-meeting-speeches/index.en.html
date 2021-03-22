@@ -1,0 +1,266 @@
+---
+title: "Text Mining Historical Mass Meeting Speeches"
+author: ''
+date: '2021-03-22'
+slug: []
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="intro" class="section level2">
+<h2>Intro</h2>
+<p>The Department of Maltese at the University of Malta launched a splendid website available <a href="https://malti.mt/">here</a>, and it also spotlights some of the dissertations by its students. Two of them immediately piqued my attention, <a href="https://www.um.edu.mt/library/oar/handle/123456789/37892"><em>Il-kelma Maltija ta’ Eddie Fenech Adami</em></a> by James Aaron Ellul and <a href="https://www.um.edu.mt/library/oar/handle/123456789/62552"><em>L-arti tal-kelma fid-diskorsi politiċi ta’ Duminku Mintoff (1962)</em></a> by Christabelle Borg.</p>
+<p>Both dissertations included sizable appendices with political speeches that are relatively hard to come by on the web, so I got curious to see what some old school text mining can reveal.</p>
+</div>
+<div id="loading-the-speeches" class="section level2">
+<h2>Loading the Speeches</h2>
+<p>I did a copy and paste job on the respective speeches and saved them into individual .txt files, read them in separately, added some date and speaker metainfo and cleaned away text in brackets that had the listener’s reactions like <em>(clapping)</em> or <em>(shouts)</em>.</p>
+<pre class="r"><code>library(tidytext)
+library(tidyverse)
+library(readr)
+library(scales)
+library(lubridate)
+
+
+efa &lt;- paste0(&quot;efa_&quot;, seq(1,4, by = 1), &quot;.txt&quot;) %&gt;% 
+  map(~read_file(paste0(&quot;~/RProjects/Historic Political Speeches/Input/&quot;, .x))) %&gt;% 
+  unlist() %&gt;% 
+  as.data.frame() %&gt;% 
+  bind_cols(data.frame(speech = dmy(c(&quot;14 Dec 1986&quot;, 
+                                  &quot;1 Feb 1987&quot;, 
+                                  &quot;8 Mar 1987&quot;, 
+                                  &quot;30 Jan 2003&quot;)))) %&gt;% 
+  mutate(speaker = &quot;Fenech Adami&quot;)
+
+mintoff &lt;- paste0(&quot;mintoff_&quot;, seq(1,7, by = 1), &quot;.txt&quot;) %&gt;% 
+  map(~read_file(paste0(&quot;~/RProjects/Historic Political Speeches/Input/&quot;, .x))) %&gt;% 
+  unlist() %&gt;% 
+  as.data.frame() %&gt;%
+  bind_cols(data.frame(speech = dmy(c(&quot;14 Jan 1962&quot;, &quot;21 Jan 1962&quot;, 
+                                  &quot;28 Jan 1962&quot;, &quot;4 Feb 1962&quot;, 
+                                  &quot;11 Mar 1962&quot;, &quot;29 Apr 1962&quot;, 
+                                  &quot;21 Oct 1962&quot;)))) %&gt;% 
+  mutate(speaker = &quot;Mintoff&quot;)
+
+speeches &lt;- efa %&gt;% 
+  bind_rows(mintoff) %&gt;%
+  rename(text = &quot;.&quot;) %&gt;% 
+  mutate(text = str_replace(text, &quot;\\([^()]+\\)&quot;, &quot;&quot;))</code></pre>
+</div>
+<div id="creating-bag-of-words-model" class="section level2">
+<h2>Creating Bag of Words Model</h2>
+<p>Our first step is to transform the speeches into a traditional <a href="https://en.wikipedia.org/wiki/Bag-of-words_model">bag of words model</a>, where each word said by a speaker in a particular speech is counted. We end up with something like the below:</p>
+<pre class="r"><code>speeches_tidied_tokens &lt;- speeches %&gt;% 
+    unnest_tokens(word, text) %&gt;% 
+  group_by(speech, speaker, word) %&gt;% 
+  tally(sort=T) %&gt;% 
+  ungroup()
+
+head(speeches_tidied_tokens, 15)</code></pre>
+<pre><code>## # A tibble: 15 x 4
+##    speech     speaker      word      n
+##    &lt;date&gt;     &lt;chr&gt;        &lt;chr&gt; &lt;int&gt;
+##  1 1987-03-08 Fenech Adami li      487
+##  2 1986-12-14 Fenech Adami li      308
+##  3 1987-02-01 Fenech Adami li      291
+##  4 1987-03-08 Fenech Adami l       273
+##  5 1987-03-08 Fenech Adami u       250
+##  6 1962-01-14 Mintoff      u       220
+##  7 1962-01-21 Mintoff      u       219
+##  8 1962-10-21 Mintoff      u       218
+##  9 1987-03-08 Fenech Adami il      211
+## 10 1986-12-14 Fenech Adami il      209
+## 11 1962-02-04 Mintoff      u       199
+## 12 1962-03-11 Mintoff      u       188
+## 13 1986-12-14 Fenech Adami l       180
+## 14 1962-03-11 Mintoff      li      175
+## 15 1962-03-11 Mintoff      l       172</code></pre>
+<p>Immediately, we notice that the most frequent words are the Maltese articles like “li”, “u” and “il”. These are considered to have next to no information, and are frequently filtered out by using a list of stopwords such as <a href="https://gist.github.com/sebleier/554280">this</a>. However, I couldn’t find one for Maltese, so we’ll have to get more creative.</p>
+</div>
+<div id="zipfs-law" class="section level2">
+<h2>Zipf’s Law</h2>
+<p>In the beginning of the 1900’s, a few smart people including the French stenographer <a href="https://en.wikipedia.org/wiki/Jean-Baptiste_Estoup">Jean-Baptiste Estoup</a> and the American Linguist <a href="https://en.wikipedia.org/wiki/George_Kingsley_Zipf">George Kingsley Zipf</a> began to notice that a consistent pattern emerged across different languages: a few words were used a great deal, while many were rarely used.</p>
+<p>More specifically, the frequency of a word is often inversely proportional to it’s rank, with the second most common word occurring only half as frequently as the first, and the third only occurring a third as frequently as the first.</p>
+<p>Put graphically, if we calculate the word frequency in our speeches, it would look like this:</p>
+<pre class="r"><code>word_freq &lt;- speeches_tidied_tokens %&gt;% 
+  select(-c(speaker, speech)) %&gt;% 
+  group_by(word) %&gt;%
+  summarise(n = sum(n)) %&gt;%
+  arrange(desc(n)) %&gt;% 
+  mutate(rank = row_number(), 
+         term_frequency = n/sum(n)) %&gt;% 
+  ungroup()
+
+word_freq %&gt;% 
+ggplot(aes(rank, term_frequency)) + 
+  geom_line(col = &quot;blue&quot;) + 
+  theme_bw()+
+  ylab(&quot;Frequency of Word&quot;)+
+  xlab(&quot;Word Rank&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>This behavior isn’t just limited to languages, and is found in many other domains, especially human constructed ones. <a href="https://en.wikipedia.org/wiki/Zipf%27s_law">The wikipedia article on Zipf’s Law goes into more detail.</a></p>
+<p>It’s the custom to plot power laws on a log-log scale like this to make the relationship more clear:</p>
+<pre class="r"><code>word_freq %&gt;% 
+  filter(n&gt;2) %&gt;% 
+ggplot(aes(rank, term_frequency, label = word)) + 
+  geom_line(col = &quot;blue&quot;) +
+  scale_y_log10(labels = comma)+
+  scale_x_log10()+
+  theme_bw()+
+  geom_text(check_overlap = T, nudge_y = .2)+
+  ylab(&quot;Frequency of Word&quot;)+
+  xlab(&quot;Word Rank&quot;)+
+  labs(title = &quot;Zipf&#39;s Law in Maltese Political Speeches&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+</div>
+<div id="get-stopwords-list" class="section level2">
+<h2>Get Stopwords List</h2>
+<p>So using what we know about Zipf’s law, we can create a custom Maltese stoplist by taking, say, the top 70 words by frequency:</p>
+<pre class="r"><code>word_freq_stopwords &lt;- 
+  word_freq %&gt;% 
+  select(word) %&gt;% 
+  head(70)</code></pre>
+<p>And to see how well it works, we can quickly plot the top 40 words</p>
+<pre class="r"><code>speeches_tidied_tokens %&gt;% 
+  group_by(speaker, word) %&gt;% 
+  summarise(n = sum(n)) %&gt;% 
+  anti_join(word_freq_stopwords) %&gt;%
+  arrange(desc(n)) %&gt;% 
+  head(40) %&gt;% 
+  ggplot(aes(fct_reorder(word, n), n, fill = speaker))+
+  geom_col()+
+  coord_flip()+
+  facet_wrap(~speaker)+
+  theme_bw()+
+  ylab(&quot;Word&quot;)+
+  xlab(&quot;Frequency&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>Seems like we’re getting somewhere! But we can do more to sift the signal from the noise!</p>
+</div>
+<div id="tf-idf" class="section level2">
+<h2>TF-IDF</h2>
+<p>Term frequency–inverse document frequency is a statistic that measures how prevalent a word is for a particular document in a set of documents. In our case, “documents” are speeches, and if all 11 speeches mentioned the word “government” the same number of times, this term would have a high term frequency but low inverse document frequency. But if the word “union” appears many times in just one speech, it would have just what we want: a term frequency weighted upward by a relatively high idf.</p>
+<p>Much of the theory behind tf-idf is now well over half a century old, and it’s very much seen as several decades past the cutting edge in favour of fancier approaches, but the gist of tf-idf probably lives on in highly optimized <a href="https://en.wikipedia.org/wiki/Okapi_BM25">search ranking functions all over the web.</a></p>
+<p>So what do you get when you feed the speeches into a tf-idf algorithm? Here’s the result, sorted by chronological order of the speech.</p>
+<pre class="r"><code>tf_idf &lt;- speeches_tidied_tokens %&gt;% 
+  bind_tf_idf(word, speech, n)
+
+tf_idf %&gt;%
+  group_by(speech) %&gt;%
+  slice_max(tf_idf, n = 6) %&gt;%
+  ungroup() %&gt;%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = speaker)) +
+  geom_col() +
+  facet_wrap(~speech, ncol = 3, scales = &quot;free&quot;) +
+  labs(x = &quot;tf-idf&quot;, y = NULL)+
+  scale_fill_manual(values = c(&quot;#00BFC4&quot;, &quot;#F8766D&quot;))+ 
+  theme(legend.position=&quot;bottom&quot;)+
+  labs(title = &quot;Top tf-idf terms by speech&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>The results are actually quite fun. Mintoff’s speech on the 14th of January gleams “xebba”, “kmandamenti” and “itiru” as noteworthy. If you’re wondering what he did with that, his speech was against the Catholic Church’s interdiction of his party that had just happened the previous year. The “xebba” was Joan or Arc, who Mintoff said was burned at the stake because she stepped on the toes of some bishops.</p>
+<p>The other two are too hilarious not to reproduce here.</p>
+<blockquote>
+<p>3,000 sena ilu, Mosè niżel mill-muntanja b’żewġ tabelli tal-irħam, u qal lill-poplu Lhudi: Dawn huma l-kmandamenti t’Alla. U kienu 10 kmandamenti t’Alla. U ilhom dawn il-kmandamenti 3,000 sena, u l-insara kollha tad-dinja jqimuhom dawn u jibqgħu jqimuhom dawn l-10 kmandamenti t’Alla. X’għamlu n-nies ta’ żminijietna? Ma’ dawn l-għaxar kmandamenti llum, żiedu l-ħdax u qalu: min jaqra l-Ħelsien jagħmel dnub. Żiedu t-tnax u qalu: min ibigħ il-Ħelsien jagħmel dnub mejjet. Żiedu t-tlettax u qalu: min iqassam il-Ħelsien jagħmel dnub mejjet, bit-2/6. Żiedu l-erbatax: min imur il-meetings Laburisti jagħmel dnub mejjet. U minn issa sakemm tiġi l-elezzjoni min jaf kemm għad iridu jżidu l-kmandamenti. U aħna ngħidulu lil dawn: U dana mhux Mosè żiedhom dawn il-kmandamenti minn fuq il-muntanja bl-ordni t’Alla, dawn waħħluhom xi erba’ qtates kontra tagħna, dawn il-kmandamenti.</p>
+</blockquote>
+<blockquote>
+<p>Aħna, il-Maltin, ilkoll niftakru x’għamlulu lil Strickland. Kemm qalu fi żmien Strickland u l-Laburisti, itiru, itiru, qalu bil-ġwienaħ itiru. Jindilku, intom tidħqu qegħdin illum, imma dakinhar, in-nies ta’ dakinhar, tgħidx x’kien hawn, kemm kien hawn min belagħha. Meta Strickland u l-Laburisti għandhom l-ingwent, jindilku, u kif jidilku l-ingwent itiru, itiru. Idħqu, idħqu illum. Ma tafux dakinhar. Min jaf kemm kien hawn min isodd it-toqob tal-ventilaturi dakinhar biex ma jidħlux ta’ Strickland billejl.</p>
+</blockquote>
+<p>The two speeches later in January continue on the religious issue, but we also see “dominion” pop up, in reference to Mintoff’s foreign policy plan of attempting to integrate Malta within the broader UK as a “dominion”. The sole speech in February mostly concerns the visit to Communist International congress, while March’s speech is a reply to a pastoral letter by the archbishop inviting Labour supporters back into the Church as “prodigal sons”, which as you can imagine was received swimmingly.</p>
+<p>The final Mintoff speech is about internal fiscal policy, where he accuses the Borg Olivier government of driving the nation several thousands of “liri” into debt.</p>
+<p>Fenech Adami’s first speech is a few days after the murder of Raymond Caruana, so those events are discussed, together with a pledge against corruption and for justice.</p>
+<p>His second speech was in Gozo, so obviously “Ghawdxi” peaks. “Kampanja” is a reference to the electoral campaign, which Fenech Adami said was in full swing, to deliver a government that would create equal opportunities for work for all.</p>
+<p>We also see a quirk developing in Fenech Adami’s second and third speeches: his fondness for the word “verament”.</p>
+<p>The “fabrika” term also seems to have a humorous story:</p>
+<blockquote>
+<p>tiftakru fabbrika oħra kbira li fetħet u għalqet fi żmienhom stess, fabbrika Ġappuniża, li kienet timpjega mijiet ta’ ħaddiema Maltin. Din kienet fabbrika b’teknoloġija moderna li riedet tbiddel il-prodott li kienet tipproduċi. Niftakar li wħud milli kienu responsabbli għaliha kienu ġew kellmuni qabel m’għalqet u qaluli li huma kienu lesti li jkomplu jaħdmu f’Malta. Riedu biss li jkunu jistgħu jipproduċu televisions tal-kulur. Imma Mintoff li jaf kollox, Mintoff li ma kien imerih ħadd, għax dawk l-Ministri kollha li issa jgħidu kontra tiegħu ma kienux jazzardaw imeruh f’xi ħaġa, Mintoff fis-sapjenza kbira tiegħu kien qal l-poplu Malti m’għandux jixtri televisions tal-kulur.</p>
+<p>U biex il-Maltin ma jixtrux televisions tal-kulur, lil dawn ma tagħhomx permess li jagħmlu t-televisions tal-kulur u l-fabbrika għalqet u mijiet ta’ ħaddiema Maltin tilfu l-post tax-xogħol tagħhom.</p>
+</blockquote>
+<p>The final speech is on the day after Fenech Adami set the date for the EU membership referendum.</p>
+<p>Not a bad signal to noise ratio for such an old algorithm, right?</p>
+</div>
+<div id="word-frequency-scatter-plot" class="section level2">
+<h2>Word Frequency Scatter Plot</h2>
+<p>Another thing we can do is plot words by frequency, with Mintoff on one axis and Fenech Adami on another. You’re equally likely to hear words along the red 45 degree diagonal in both mass meetings, with words at the top right of the graph being the most popular.</p>
+<p>Words clustered in the top left area are generally unique to Mintoff mass meetings, while words clustered on the bottom right are unique to Fenech Adami mass meetings.</p>
+<p>1947 and 1955 seem to be references to those respective general elections.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+</div>
+<div id="topic-modeling" class="section level2">
+<h2>Topic Modeling</h2>
+<p>Perhaps the most powerful variation of bag of word approaches is topic modeling. Topic modeling launches from the rather basic assumption that documents are a collection or words. “Topics” are also represented by different collections of words, and every document can have a mixture of these topics.</p>
+<p>For instance, taking our corpus as an example, we might have a topic that contains “EU”, “membership”, “Euro” and “negotiation”, which we label as “EU Affairs”. Our speeches will reflect a proportion of this topic (if the speech was entirely about joining the Eurozone, it will be high, maybe 80% or even 100%, while if the speech was about Joan or Arc, it might even be 0%).</p>
+<p>One of the most popular topic modeling algorithms is Latent Dirichlet Allocation and many “speed reading” services employ it to distill what a vast collection of text is about.</p>
+<p>If you’re curious about how LDA works, <a href="https://youtu.be/T05t-SqKArY">this is a very friendly introduction by Luis Serrano.</a></p>
+<p>But in short, an LDA algorithm takes our words in the form of a matrix as an input, and the number of clusters or “topics” we want it to find - in my case I opted for 9 for the simple reason that it fits nicely into a 3x3 graph.</p>
+<pre class="r"><code>library(topicmodels)
+
+lda &lt;- speeches_tidied_tokens %&gt;%
+  anti_join(word_freq_stopwords) %&gt;% 
+  cast_dtm(document = speech, word, n) %&gt;% 
+  LDA(k = 9, control = list(seed = 19032021))
+
+topics &lt;- tidy(lda, matrix = &quot;beta&quot;)
+
+top_terms &lt;- topics %&gt;%
+  group_by(topic) %&gt;%
+  top_n(10, beta) %&gt;%
+  ungroup() %&gt;%
+  arrange(topic, -beta)
+
+top_terms %&gt;%
+  mutate(term = reorder_within(term, beta, topic)) %&gt;%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = &quot;free&quot;) +
+  scale_y_reordered()+
+  labs(title = &quot;Inferred Topic&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>With that, we can then rename the clusters with what we infer from them:</p>
+<pre class="r"><code>topic_labels &lt;- tibble(topic = c(1:9), 
+                       label = c(&quot;PN Pledges&quot;,
+                       &quot;&quot;,
+                       &quot;EU&quot;,
+                       &quot;Religious Issues&quot;,
+                       &quot;PN Pledges&quot;,
+                       &quot;Religious Issues&quot;,
+                       &quot;Gvmt. Debt&quot;,
+                       &quot;UK Relations&quot;,
+                       &quot;Raymond Caruana&quot;))
+
+topic_labels</code></pre>
+<pre><code>## # A tibble: 9 x 2
+##   topic label             
+##   &lt;int&gt; &lt;chr&gt;             
+## 1     1 &quot;PN Pledges&quot;      
+## 2     2 &quot;&quot;                
+## 3     3 &quot;EU&quot;              
+## 4     4 &quot;Religious Issues&quot;
+## 5     5 &quot;PN Pledges&quot;      
+## 6     6 &quot;Religious Issues&quot;
+## 7     7 &quot;Gvmt. Debt&quot;      
+## 8     8 &quot;UK Relations&quot;    
+## 9     9 &quot;Raymond Caruana&quot;</code></pre>
+<p>Then, we can plot which speeches discussed which topics:</p>
+<pre class="r"><code>gamma &lt;- tidy(lda, matrix = &quot;gamma&quot;) %&gt;% 
+  mutate(document = ymd(document)) %&gt;% 
+  inner_join(topic_labels)
+
+gamma %&gt;%
+  filter(topic != 2) %&gt;% 
+  ggplot(aes(factor(document), gamma, fill = label)) +
+  geom_col() +
+  coord_flip()+
+  facet_wrap(~ label, ncol = 6) +
+  labs(x = &quot;Speech&quot;, y = &quot;&quot;)+
+  theme_bw()+
+  theme(legend.position = &quot;none&quot;)+
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+</div>
