@@ -1,0 +1,196 @@
+---
+title: "What are the MEP election polls indicating?"
+author: ''
+date: '2019-05-21'
+slug: what-do-the-polls-say-for-the-mep-election
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Malta is one of the more enthusiastic EU countries when it comes to MEP elections, with only [Belgium and Luxembourg](http://www.europarl.europa.eu/elections2014-results/en/turnout.html) managing a higher turnout in 2014. 
+
+Besides determining EU and local council level representation, this election will also serve as the first test by popular trial of Adrian Delia as PN leader.
+
+## How Things Stand
+
+To build an adequate polling tracker you need an abundance of high quality polling. Luckily this has become more frequent in recent years. Three sources are used:
+
+* Malta Today's in house polling.
+
+* Sagalytics's polling, commissioned  by Torca.
+
+* MISCO's polling, commissioned  by Times of Malta.
+
+Here's what the situation looks like when the polls are plotted with a LOESS regression curve:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(plotly)
+
+Polls <- read_excel("C:/Users/Charles Mercieca/Documents/RProjects/PollOfPolls/Input/2019PollOfPolls.xlsx", sheet = "Tidy", 
+                    col_types = c("date","text", "numeric", "numeric"))
+
+GatheredPolls <- gather(Polls, Party, Value, -c("Date", "Pollster"))
+
+theme_set(theme_classic())
+
+static <- ggplot(GatheredPolls, aes(x = Date, y = Value, col = Party, label = Pollster)) +
+  geom_point() +
+  geom_smooth(se = F, alpha = 0.5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "How are the main Political Parties Polling?",
+       subtitle = "March 2018 to May 2019") +
+  ylab("Percent of Electorate")
+
+ggplotly(static)
+
+```
+
+The LOESS's final fitted values place PL with 57.4% of the vote and PN with 39.3% of the vote, resulting in a massive 18 percentage point difference. 
+
+## Seats
+
+Several commentators have taken this to mean that PN will be devastated in terms of seats, with Malta Today trying to estimate the seats each party will get by dividing the estimated number of votes per party by the quota. Using this approach, PL should be allocated a minimum of 4 seats.
+
+However, I think this approach is problematic because of the nature of both the Single Transferable Vote system, and the MEP elections.
+
+### STV
+
+Firstly, imagine a situation where party A has a small crop of popular candidates while party B has a larger crop of less popular candidates. Party B might manage more votes, and elects the first candidate, but if the transferred votes reflect the larger, broader, pattern, they will be diluted among many other candidates. 
+
+Party A's first elected candidate might have voters that almost exclusively voted for another candidate, allowing another one of Party A's candidates a massive amount of transferred votes, leapfrogging him or her above the quota, and several of Party B's candidates. 
+
+A pratical example of this from the 2014 MEP election: when Alfred Sant reached the quota, nearly a third of his transferred votes went to Miriam Dalli, and another third to Marlene Mizzi, with the remaining 10 candidates left to share the rest. 
+
+This effect is mostly prevalent in the first few counts, eventually diminishing and petering out.
+
+### Shifting Focus
+
+As to who is Party A and who is Party B in this election, I'm not too sure. You can probably make a solid argument for either one. That being said, I do think that people focus way too much on party level performance and don't look at individual candidate level popularity enough. 
+
+For instance, here's the top 10 polling candidates as per the 19th May Malta Today poll:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+MEPS <- read_excel("C:/Users/Charles Mercieca/Documents/RProjects/PollOfPolls/Input/MEPs2004-2014.xlsx")
+
+Four <- MEPS %>% 
+  filter(Year == 2004) %>% 
+  top_n(10, wt = Percent) %>% 
+  arrange(desc(Percent)) %>% 
+  mutate(QuotaPercent = Quota/TotalValidVotes)
+
+Nine <- MEPS %>% 
+  filter(Year == 2009) %>% 
+  top_n(10, wt = Percent) %>% 
+  arrange(desc(Percent)) %>% 
+  mutate(QuotaPercent = Quota/TotalValidVotes)
+
+Fourteen <- MEPS %>% 
+  filter(Year == 2014) %>% 
+  top_n(10, wt = Percent) %>% 
+  arrange(desc(Percent)) %>% 
+  mutate(QuotaPercent = Quota/TotalValidVotes)
+
+
+
+plot1 <- ggplot(Four, aes(fct_reorder(Name, Percent), Percent, fill = Elected))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  facet_grid(~Year)+
+  xlab("")+
+  ylab("Percent of Valid 1st Count Votes Cast") +
+  scale_fill_manual(values = c("Yes" = "Black", "No" = "grey")) +
+  labs(caption = "Source: Malta Elections Project, University of Malta")+
+  geom_hline(yintercept = Four$QuotaPercent, linetype="dashed", color = "red")+
+  geom_text(aes(0,Four$QuotaPercent,label = "Quota", vjust = -2, hjust = -0.2))
+
+plot2 <- ggplot(Nine, aes(fct_reorder(Name, Percent), Percent, fill = Elected))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  facet_grid(~Year)+
+  xlab("")+
+  ylab("Percent of Valid 1st Count Votes Cast") +
+  scale_fill_manual(values = c("Yes" = "Black", "No" = "grey"))+
+  labs(caption = "Source: Malta Elections Project, University of Malta")+
+  geom_hline(yintercept = Four$QuotaPercent, linetype="dashed", color = "red")+
+  geom_text(aes(0,Four$QuotaPercent,label = "Quota", vjust = -2, hjust = -0.2))
+
+plot3 <- ggplot(Fourteen, aes(fct_reorder(Name, Percent), Percent, fill = Elected))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  facet_grid(~Year)+
+  xlab("")+
+  ylab("Percent of Valid 1st Count Votes Cast") +
+  scale_fill_manual(values = c("Yes" = "Black", "No" = "grey"))+
+  labs(caption = "Source: Malta Elections Project, University of Malta")+
+  geom_hline(yintercept = Four$QuotaPercent, linetype="dashed", color = "red")+
+  geom_text(aes(0,Four$QuotaPercent,label = "Quota", vjust = -2, hjust = -0.2))
+
+plot4 <- MEPS %>% 
+  filter(Year == 2019) %>% 
+  ggplot(aes(fct_reorder(Name, Percent), Percent, fill = Party))+
+  geom_col()+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  facet_grid(~LegendField)+
+  xlab("")+
+  ylab("Percent Polling") +
+  scale_fill_manual(values = c("PL" = "#F8766D", "PN" = "#619CFF", "IE" = "grey"))+
+  labs(caption = "Source: Malta Today Survey, 19th May")
+
+plot4
+```
+
+And here's how the top 10 candidates by First Count Votes looked in comparison in the 2004, 2009 and 2014 elections. [The source of this data is a splendid collection of electoral data hosted by the University of Malta.](https://um.edu.mt/projects/maltaelections/elections/mep)
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot1
+plot2
+plot3
+```
+
+In 2004 for instance, Arnold Cassola was the fourth best performing candidate in the first count. But by the end, he was beaten by Louis Grech and David Casa.
+
+2009 again saw David Casa surge, after he cashed in on 15,240 votes from Simon Busuttil's transfer of 27,420. Casa's total first count votes for reference were 6,539, which just gives you an idea of the potential surprises Saturday could hold.
+
+## Litmus Test?
+
+Back in 2017, Chris Said had routinely spoken of these MEP elections as a litmus test for whatever PN leadership was in place by that time, and I think it's safe to assume most people also are thinking about this election in the same way. 
+
+While that is one way to look at it, we also need to keep in mind that we already have tools for measuring public opinion - polls. Fundamentally the MEP and General Elections are two different elections, and voters behave differently. For instance, turnout tends to be diminished and small parties do better than in general elections. The 73ish percent of people that are inclined to vote in MEP elections are also almost certainly very different than the 93% that vote in a general election.
+
+It's also worth noting that PL has always outperformed the PN in European Parliament Elections.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+HistoricalPerformance <- read_excel("C:/Users/Charles Mercieca/Documents/RProjects/PollOfPolls/Input/HistoricalPerformance.xlsx") %>% 
+  mutate(Share = Share/100)
+Historical <- ggplot(HistoricalPerformance, aes(x = Year, y = Share, col = Party)) +
+  geom_point() +
+  geom_smooth(se = F, alpha = 0.5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Historical PL/PN Performance at European Parliament elections") +
+  ylab("Percent of Electorate")
+Historical
+```
+
+One easy and probably flawed way to interpret the above graph would be to assume it's each party's core vote, with party loyalists eager to take any opportunity to support their tribe, and moderates and the politically ambivalent are more likely to sit them out. 
+
+The reality however is almost undoubtedly more complicated than that. 
+
+## What will Happen on Saturday?
+Barring a complete and utter polling miss, PN will head to its third double digit consecutive electoral defeat by as many leaders. 
+
+The answer to how many seats each party will win remains more elusive, and a surprise or two may be in store.
