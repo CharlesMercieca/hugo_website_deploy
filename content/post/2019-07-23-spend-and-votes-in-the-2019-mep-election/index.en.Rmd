@@ -1,0 +1,185 @@
+---
+title: "Spend and Votes in the 2019 MEP Election"
+author: ''
+date: '2019-07-23'
+slug: spend-and-votes-in-the-2019-mep-election
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The role of money in shaping political outcomes is a perennial question. In the United States for instance, [the candidates that spend the most win 90% of the time](https://fivethirtyeight.com/features/money-and-elections-a-complicated-love-story/). Thanks to [this fantastic Times of Malta article, we have an accurate picture of the spend of the 2019 MEP Candidates](https://timesofmalta.com/articles/view/how-much-did-mep-candidates-spend-and-who-had-the-deepest-pockets.721918). So I put these values in a table, together with the 1st count votes of each candidate, the party, Facebook likes as of 17th July (if I had the foresight, likes on the day before the election would have of been better), whether the candidate is an incumbent, and the spend on social media that my old University friend David Hudson published [in this article](https://www.maltatoday.com.mt/news/europe-2019/95263/the_facebook_election_candidates_spent_big_on_social_media).
+
+The complete dataset looks something like this:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(plotly)
+theme_set(theme_minimal())
+
+setwd("~/RProjects/MEP2019Spending")
+
+MEPData <- read_excel("Input/2019MEP.xlsx")
+head(MEPData)
+```
+
+## Looking at Just Spend vs Votes
+
+Now I had already done something similar to this before for the [2017 General Election](https://lovinmalta.com/opinion/analysis/does-spending-money-campaigning-help-maltese-politicians-rake-in-more-votes/), but in that case only candidates that got elected declared their spend. So while it was clear that candidates who spent more got more votes, we can't say this is true for all candidates. In this way, this analysis will be more rigorous because we have the spend of the whole field of candidates, regardless of the outcome.
+
+And sure enough, when you plot it, the relationship between spend and votes is just as you'd expect: as one goes up, so does the other.
+```{r echo=FALSE, warning=FALSE}
+a <- ggplot(MEPData, aes(x = log(FirstCountVotes), y = log(Spend), label = Candidate))+
+  geom_point()+
+  geom_smooth(method = "lm", se = F)+
+  xlab("First Count Votes (log scale)")+
+  ylab("Spend (log scale)")
+  #scale_color_manual(values=c("Green", "Black", "Grey", "White", "Black", "Orange", "Red", "Blue"))
+ggplotly(a)
+```
+
+Fitting a linear model tells us that the average votes a candidate got was 1314, and that for every one euro of spend, a candidate gets an additional 0.47 of a vote, or 2.12 euros per vote.
+
+```{r echo=TRUE}
+lm(FirstCountVotes~Spend, data = MEPData) %>% 
+summary()
+```
+
+Not a bad start! However we're only explaining around 30% of the variance up to this point. 
+
+## Adding Facebook likes
+
+What if we add Facebook Likes? Visualising them like before, they also look like a strong predictor:
+
+```{r echo=FALSE}
+FBLikes <- ggplot(MEPData, aes(x = log(FirstCountVotes), y = log(FacebookLikes), label = Candidate))+
+  geom_point()+
+  geom_smooth(method="lm", se = F)+
+  xlab("First Count Votes (log scale)")+
+  ylab("Facebook Likes (log scale)")
+ggplotly(FBLikes)
+
+lm(FirstCountVotes ~ Spend + FacebookLikes, data = MEPData) %>% 
+  summary()
+```
+
+But something weird happens as soon as we add Facebook likes to the linear model. The R-Squared jumps up to 80%, indicating we're accounting for much more of the variance than before. But spend is now negatively associated with votes, and we were seeing just the opposite before. The intercept has also changed dramatically.
+
+## Multicollinearity
+
+Linear models expect independent variables to be, well, _independent_. And it turns out that Spend and Facebook likes are very strongly correlated:
+```{r}
+cor(MEPData$Spend, MEPData$FacebookLikes)
+```
+
+What this tells us is that those variables seem to be measuring the same concept. It could for instance be the case that the more popular a candidate is, the easier it becomes to acquire funds to spend, and the more followers on Facebook one gets as a result of this advertising. 
+
+Feeding our model two highly correlated variables makes us run into a problem called [multicollinearity](https://en.wikipedia.org/wiki/Multicollinearity). Now if our aim was to make predictions of a candidate's first count votes given spend and Facebook likes, this wouldn't be a problem. After all, it's improved the goodness of the fit of the model by 50%. But given that we're more interested in explaining the presence and size of effects, we need to address it.
+
+
+Given that we've already seen how cost alone is associated with votes, let's take the easy way out and remove cost for now, and add the effect of incumbency:
+
+```{r}
+lm(FirstCountVotes ~ FacebookLikes + Incumbent, data = MEPData) %>% 
+  summary()
+```
+
+Surprisingly, Facebook likes seem to be an even better predictor of first count votes than spend. And as expected, already being an MEP is a huge advantage, with our model saying it's worth an additional 5843 votes. Whether this popularity is because incumbents have access to more financing or if this higher access to financing is because of popularity is a chicken and egg question, but incumbents spent a median of 37,438 euros in the 2019 campaign as opposed to a median of 2,117 by non-incumbents.
+```{r echo=FALSE}
+ggplot(MEPData, aes(x = Incumbent, y = Spend, fill = Incumbent))+
+  geom_boxplot()
+```
+
+## Spend by Parties
+
+The average PN MEP candidate also outspent the average PL candidate, and the two major parties comprise the bulk of the spend:
+```{r echo=FALSE}
+MEPData %>% mutate(Party = fct_lump(Party, n = 3, w = Spend)) %>% 
+ggplot(aes(x = fct_reorder(Party, -Spend), y = Spend, fill = Party))+
+  geom_boxplot()+
+  scale_fill_manual(values=c("#7CAE00", "#F8766D", "#00BFC4", "White"))+
+  theme(legend.position = "none")+
+  xlab("Party")
+```
+
+When it comes to social media however, one party does seem to have a disproportional success. PD's median likes ae equal to PL's and greater than PN's, however both main parties have huge outliers over the 50K mark (Dalli & Metsola). 
+
+```{r}
+MEPData %>% mutate(Party = fct_lump(Party, n = 3, w = FacebookLikes)) %>% 
+ggplot(aes(x = fct_reorder(Party, -FacebookLikes), y = FacebookLikes, fill = Party))+
+  geom_boxplot()+
+  scale_fill_manual(values=c("Orange", "#F8766D", "#00BFC4", "White"))+
+  theme(legend.position = "none")+
+  xlab("Party")+
+  ylab("Number of Facebook Page Likes")
+```
+
+## Spend on Digital?
+
+So, what's the ratio of money spent purely on Facebook out of the whole campaign? To do this, I just divided the amount spent on social media by the total amount declared to have of been spent. The candidates that had no social media spend were excluded. The top embracers of the digital world were:
+
+```{r echo=FALSE}
+MEPData %>% 
+  mutate(DigitalSpendRatio = SocialMediaSpend/Spend) %>% 
+  arrange(desc(DigitalSpendRatio)) %>% 
+  head(10) %>% 
+  ggplot(aes(fct_reorder(Candidate, DigitalSpendRatio), DigitalSpendRatio, fill = Candidate)) +
+  geom_col()+
+  coord_flip()+
+  theme(legend.position = "none")+
+  scale_y_continuous(labels=scales::percent)+
+  xlab("Candidate")+
+  ylab("Percentage of Total Spend on Facebook")
+```
+
+The bottom 10 were:
+
+```{r echo=FALSE}
+MEPData %>% 
+  mutate(DigitalSpendRatio = SocialMediaSpend/Spend) %>% 
+  arrange(desc(DigitalSpendRatio)) %>%
+  drop_na() %>% 
+  tail(10) %>% 
+  ggplot(aes(fct_reorder(Candidate, -DigitalSpendRatio), DigitalSpendRatio, fill = Candidate)) +
+  geom_col()+
+  coord_flip()+ 
+  theme(legend.position = "none")+
+  scale_y_continuous(labels=scales::percent)+
+  xlab("Candidate")+
+  ylab("Percentage of Total Spend on Facebook")
+```
+
+While it's surprising to see heavyweights like Miriam Dalli, Josianna Cutajar and Roberta Metsola in this graph, it would be wise to keep in mind that those individual campaigns got significant boosts from their respective party's main platform, which were declared seperately in [the MaltaToday article](https://www.maltatoday.com.mt/news/europe-2019/95263/the_facebook_election_candidates_spent_big_on_social_media).
+
+## What have we learned?
+
+### The candidates that spend the most also usually get elected
+
+The 6 elected MEP's were in the top 10 spenders.
+
+```{r echo=FALSE}
+Elected <- data.frame(Elected = c("Yes", "Yes", "No", "No", "Yes", "Yes", "No", "Yes", "Yes", "No"))
+
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+MEPData %>% 
+  arrange(desc(Spend)) %>% 
+  head(10) %>% 
+  bind_cols(Elected) %>% 
+  ggplot(aes(fct_reorder(Candidate, Spend), Spend, fill = Elected))+
+  geom_col()+
+  coord_flip()+ 
+  scale_fill_manual(values = cbp1)+
+  xlab("Candidate")
+```
+
+### Spend isn't a bad predictor of First Count Votes, but Facebook Likes is even better
+
+I think this was my biggest surprise in this whole analysis. Using just Facebook likes and wheter a candidate is an incumbent, we could account for nearly 4/5ths of the variance in First Count Votes. That's huge for a variable I decided to include on a whim. 
