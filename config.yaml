@@ -1,6 +1,6 @@
 baseurl: https://optimistic-thompson-52514e.netlify.app/
 DefaultContentLanguage: en
-title: Beautiful Hugo
+title: Charles Mercieca
 theme: beautifulhugo
 metaDataFormat: yaml
 pygmentsStyle: trac
@@ -21,38 +21,14 @@ Params:
   rss: yes
   showRelatedPosts: yes
   socialShare: yes
-  subtitle: Build a beautiful and simple website in minutes
+  #subtitle: Build a beautiful and simple website in minutes
   useHLJS: yes
   wordCount: yes
 Author:
-  500px: username
-  bandcamp: username
-  bitbucket: username
-  codepen: username
-  email: youremail@domain.com
-  facebook: username
-  github: username
-  gitlab: username
-  instagram: username
-  itchio: username
-  kaggle: username
-  linkedin: username
-  mastodon: url
-  name: Some Person
-  paypal: username
-  reddit: username
-  slack: username
-  snapchat: username
-  soundcloud: username
-  spotify: username
-  stackoverflow: users/XXXXXXX/username
-  telegram: username
-  twitter: username
-  vk: username
-  website: yourwebsite.com
-  weibo: username
-  xing: username
-  youtube: user/username
+  email: c.g.mercieca@gmail.com
+  github: CharlesMercieca
+  linkedin: charles-mercieca-a24647196
+  twitter: CharlesMerc
 menu:
   main:
     - name: Blog
@@ -60,21 +36,6 @@ menu:
       weight: 1
     - name: About
       url: page/about/
-      weight: 3
-    - identifier: samples
-      name: Samples
-      weight: 2
-    - name: Big Image Sample
-      parent: samples
-      url: post/2017-03-07-bigimg-sample
-      weight: 1
-    - name: Math Sample
-      parent: samples
-      url: post/2017-03-05-math-sample
-      weight: 2
-    - name: Code Sample
-      parent: samples
-      url: post/2016-03-08-code-sample
       weight: 3
     - name: Tags
       url: tags
