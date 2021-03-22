@@ -1,0 +1,269 @@
+---
+title: "Making 'Tracking Malta's Vaccine Rollout'"
+author: ''
+date: '2021-02-20'
+slug: making-tracking-malta-s-vaccine-rollout
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<p>This is intended to be a companion article to the app for those who are more technically oriented and want the details.</p>
+<div id="where-is-the-data-from" class="section level2">
+<h2>Where is the data from?</h2>
+<p>Originally, I was going to use OurWorldInData as a source, but then I discovered they were actually just piggybacking off <a href="https://github.com/COVID19-Malta/COVID19-Cases">a local project on GitHub which seems to be managed by the Department of Health</a>, so I used that!</p>
+<p>The only additional field I add is the daily rate of vaccinatations, which I calculate by subtracting the day’s total from the previous day’s.</p>
+<pre class="r"><code>vaccinations &lt;- read_csv(&quot;https://raw.githubusercontent.com/COVID19-Malta/COVID19-Cases/master/COVID-19%20Malta%20-%20Vaccination%20Data.csv&quot;) %&gt;%
+        janitor::clean_names() %&gt;% 
+        mutate(date = lubridate::dmy(date),
+               daily_rate = total_vaccination_doses - lag(total_vaccination_doses))</code></pre>
+</div>
+<div id="whats-the-smoother-in-the-main-graph" class="section level2">
+<h2>What’s the smoother in the Main Graph?</h2>
+<p>It is a plain vanilla <a href="https://en.wikipedia.org/wiki/Generalized_additive_model">Generalized additive model</a> predicting vaccinations as a function of the date. The reason I opted for a GAM is because a simple linear model was accounting for the relatively slow rollout in January, while the GAM’s spline was more than happy to comply and fit.</p>
+<pre class="r"><code>ggplot(vaccinations, aes(x = date, y = total_vaccination_doses))+
+            geom_point()+
+            geom_line(stat = &quot;smooth&quot;, method = &quot;gam&quot;, fullrange = TRUE, 
+                      se = F, colour = &quot;orange&quot;, alpha = .8)+
+  geom_line(stat = &quot;smooth&quot;, method = &quot;lm&quot;, fullrange = TRUE, 
+                      se = F, colour = &quot;blue&quot;, alpha = .8)+
+            scale_x_date(date_breaks = &quot;1 month&quot;, 
+                         labels=date_format(&quot;%b-%Y&quot;),
+                         limits = as.Date(c(&#39;2021-01-03&#39;,&#39;2021-06-01&#39;)))+
+  xlab(&quot;&quot;)+
+  ylab(&quot;Vaccine Doses Administered&quot;)+
+  theme_bw()+
+  labs(title = &quot;Linear Model (Blue) vs GAM (Orange)&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>Incidentally, because the rate picked up in recent weeks, the GAM’s prediction is that it will continue to do so, albeit slightly in the future. You can notice this in the app by setting the current rate slider to 1 – the dashed line will fall slightly below.</p>
+</div>
+<div id="how-is-the-7-day-mean-calculated-in-the-secondary-graph" class="section level2">
+<h2>How is the 7 day mean calculated in the secondary graph?</h2>
+<p>It’s literally a vector of last week’s calculated vaccination values piped into R’s arithmetic mean function.</p>
+<pre class="r"><code>last_week_rate &lt;- tail(vaccinations, 7) %&gt;% 
+        pull(daily_rate) %&gt;% 
+        mean()</code></pre>
+<p>This is used to feed the text parameter in the dashboard:</p>
+<pre class="r"><code>output$text &lt;- renderText({paste(&quot;Local authorities have been managing an average of &quot;,
+                                     &quot;&lt;b&gt;&quot;,
+                                     round(last_week_rate),
+                                     &quot;&lt;/b&gt;&quot;,
+                                     &quot; daily vaccinations over the last week.&quot;)})</code></pre>
+<p>And as the input to the function to estimate the accelerated/decelerated rollout as inputted by the slider:</p>
+<pre class="r"><code>generate_preds &lt;- function(rate, to_date = &#39;2022-01-01&#39;){
+        #takes total vaccinations at max date and cumulitatively adds the rate
+        tibble(
+            Date = seq(ymd(Sys.Date()), ymd(to_date), by = &quot;1 day&quot;),
+            Last = max(vaccinations$total_vaccination_doses),
+            Rate = rate,
+            n = Last + cumsum(Rate)) %&gt;% 
+            select(Date, n) %&gt;% 
+            mutate(n = round(n))}</code></pre>
+<p>e.g. to calculate the line with a rate twice the current one, the generate_preds function would be run as:</p>
+<pre class="r"><code>generate_preds(last_week_rate*2) %&gt;% 
+  head()</code></pre>
+<pre><code>## # A tibble: 6 x 2
+##   Date            n
+##   &lt;date&gt;      &lt;dbl&gt;
+## 1 2021-03-22 152668
+## 2 2021-03-23 159401
+## 3 2021-03-24 166135
+## 4 2021-03-25 172869
+## 5 2021-03-26 179603
+## 6 2021-03-27 186336</code></pre>
+</div>
+<div id="how-did-you-get-the-date-to-the-600000th-dose" class="section level2">
+<h2>How did you get the date to the 600,000th dose?</h2>
+<p>In quite a hacky way, courtesy of this <a href="https://stackoverflow.com/questions/9789871/method-to-extract-stat-smooth-line-fit">stackoverflow post</a>. I ran ggplot_build on the final ggplot object, found the geom_smooth aesthetic, filtered for the first row where 600,000 was reached, and then pull off the equivalent x-axis element. Since the geom_smooth layer converts it to a POSIXct number to run the model on, we have to convert it back using lubridate’s as_date function.</p>
+<pre class="r"><code> date_fin &lt;- ggplot_build(p)$data[[2]] %&gt;% 
+        filter(y &gt;= 600000) %&gt;% 
+        head(1) %&gt;% 
+        select(x) %&gt;%
+        pull() %&gt;% 
+        lubridate::as_date() %&gt;% 
+        sf()</code></pre>
+</div>
+<div id="whats-the-relevance-of-600000" class="section level2">
+<h2>What’s the relevance of 600,000?</h2>
+<p>There are around 500,000 people in Malta, so assuming a two-dose vaccine, 600,000 shots equate to around 60%. However if a single dose vaccine is deployed, that number would go up.</p>
+</div>
+<div id="rs-pretty-great" class="section level2">
+<h2>R’s Pretty Great…</h2>
+<p>Two of the greatest assets R leverages are RMarkdown/blogdown (which is how you’re reading this) and RShiny (which is where the interactive app resides). With their relatively small learning curve, these two tools allow you to share your analysis instead of letting it rot on your laptop.</p>
+</div>
+<div id="full-code" class="section level2">
+<h2>Full Code</h2>
+<pre class="r"><code>library(shiny)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(plotly)
+
+# Define UI for application
+ui &lt;- fluidPage(
+
+    # Application title
+    titlePanel(&quot;Tracking Malta’s Vaccine Rollout&quot;),
+
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput(&quot;bins&quot;,
+                        &quot;How things will look if the current rate is increased by a factor of:&quot;,
+                        min = 0.0,
+                        max = 4.5,
+                        value = 1.5,
+                        step = 0.1),
+            
+            h4(&quot;What am I looking at?&quot;),
+            p(&quot;This is a GAM smoother fitted over vaccination data updated daily from&quot;, 
+              a(href=&quot;https://github.com/COVID19-Malta/COVID19-Cases&quot;, 
+                &quot;the amazing folks at COVID19-Malta.&quot;)),
+            br(),
+            
+            h4(&quot;What&#39;s the progress?&quot;),
+            htmlOutput(&quot;text&quot;),
+            br(),
+            
+            htmlOutput(&quot;text2&quot;),
+            br(),
+            
+            htmlOutput(&quot;text3&quot;),
+            br(),
+            
+            p(a(&quot;charlesmercieca.com&quot;, 
+                href = &quot;http://charlesmercieca.com/&quot;))
+        ),
+
+        # Show a plot
+        mainPanel(
+            tabsetPanel(
+                tabPanel(&quot;Daily Doses&quot;, plotlyOutput(&quot;distPlot&quot;)),
+                tabPanel(&quot;Mean Rate &amp; Number Fully Vaccinated&quot;, plotlyOutput(&quot;rate&quot;, height = &quot;250px&quot;), 
+                         plotlyOutput(&quot;secondaries&quot;, height = &quot;250px&quot;)))
+        )
+    )
+)
+
+# Define server logic required to draw plot
+server &lt;- function(input, output) {
+
+    vaccinations &lt;- read_csv(&quot;https://raw.githubusercontent.com/COVID19-Malta/COVID19-Cases/master/COVID-19%20Malta%20-%20Vaccination%20Data.csv&quot;) %&gt;%
+        janitor::clean_names() %&gt;% 
+        mutate(date = lubridate::dmy(date),
+               daily_rate = total_vaccination_doses - lag(total_vaccination_doses))
+    
+    last_week_rate &lt;- tail(vaccinations, 7) %&gt;% 
+        pull(daily_rate) %&gt;% 
+        mean()
+    
+    generate_preds &lt;- function(rate, to_date = &#39;2022-01-01&#39;){
+        #takes total vaccinations at max date and cumulitatively adds the rate
+        tibble(
+            Date = seq(ymd(Sys.Date()), ymd(to_date), by = &quot;1 day&quot;),
+            Last = max(vaccinations$total_vaccination_doses),
+            Rate = rate,
+            n = Last + cumsum(Rate)) %&gt;% 
+            select(Date, n) %&gt;% 
+            mutate(n = round(n))
+    }
+    
+    p &lt;- qplot(x = date, y = total_vaccination_doses, data=vaccinations) + 
+        stat_smooth(method = &quot;gam&quot;, fullrange = TRUE)+
+        scale_x_date(date_breaks = &quot;1 month&quot;, 
+                     labels=date_format(&quot;%b-%Y&quot;),
+                     limits = as.Date(c(&#39;2021-01-03&#39;,&#39;2021-12-20&#39;)))
+    
+    sf &lt;- stamp(&quot;Sunday, Jan 17, 1999&quot;)
+    
+    date_fin &lt;- ggplot_build(p)$data[[2]] %&gt;% 
+        filter(y &gt;= 600000) %&gt;% 
+        head(1) %&gt;% 
+        select(x) %&gt;%
+        pull() %&gt;% 
+        lubridate::as_date() %&gt;% 
+        sf()
+    
+    updated &lt;- max(vaccinations$date) %&gt;% 
+        sf()
+
+    output$text &lt;- renderText({paste(&quot;Local authorities have been managing an average of &quot;,
+                                     &quot;&lt;b&gt;&quot;,
+                                     round(last_week_rate),
+                                     &quot;&lt;/b&gt;&quot;,
+                                     &quot; daily vaccinations over the last week.&quot;)})
+    
+    output$text2 &lt;- renderText({paste0(&quot;At this rate, the 600,000th dose will be administered on &quot;,
+                                      &quot;&lt;b&gt;&quot;,
+                                      date_fin,
+                                      &quot;&lt;/b&gt;.&quot;)})
+    
+    output$text3 &lt;- renderText({paste0(&quot;&lt;i&gt; Vaccination data current as of: &quot;, 
+                                      updated,
+                                      &quot;&lt;i/&gt;&quot;,
+                                      &quot;.&quot;)})
+    
+    output$distPlot &lt;- renderPlotly({
+        ratepreds &lt;- reactive({generate_preds(last_week_rate*input$bins)})
+        
+        main &lt;- ggplotly(ggplot(vaccinations, aes(x = date, y = total_vaccination_doses))+
+            geom_point()+
+            geom_line(stat = &quot;smooth&quot;, method = &quot;gam&quot;, fullrange = TRUE, 
+                      se = F, colour = &quot;orange&quot;, alpha = .8)+
+            scale_x_date(date_breaks = &quot;1 month&quot;, 
+                         labels=date_format(&quot;%b-%Y&quot;),
+                         limits = as.Date(c(&#39;2021-01-03&#39;,&#39;2022-01-01&#39;)))+
+            scale_y_continuous(labels = scales::comma, limits = c(0, 780000))+
+            geom_line(data = ratepreds(), aes(x = Date, y = n), lty = &quot;dashed&quot;)+
+            xlab(&quot;&quot;)+
+            ylab(&quot;Vaccine Doses Administered&quot;)+
+            theme_bw()+
+            theme(axis.text.x = element_text(angle = -30, vjust = 1, hjust = 0))+
+            labs(title = &quot;Vaccination Progression at Current Rate&quot;),
+            tooltip = c(&quot;Date&quot;, &quot;n&quot;))
+        
+        text_y &lt;-
+            round(main$x$data[[2]]$y)
+        text_x &lt;- 
+            lubridate::as_date(main$x$data[[2]]$x)
+            
+            main %&gt;%
+                style(hoverinfo = &quot;skip&quot;, traces = 1) %&gt;%
+                style(text = paste(text_x,&quot;\n&quot;, &quot;Estimated Vaccinations: &quot;, text_y), traces = 2) 
+        
+    })
+    
+    output$rate &lt;- renderPlotly({
+        
+        rateGraph &lt;- ggplotly(tail(vaccinations, 7) %&gt;% 
+                                  ggplot(aes(x=date, y = daily_rate))+
+                                  geom_point()+
+                                  ylab(&quot;Daily Vaccinations&quot;)+
+                                  xlab(&quot;&quot;)+
+                                  geom_hline(yintercept = last_week_rate, lty=&quot;longdash&quot;)+
+                                  labs(title = &quot;Daily Vaccinations over Last Week&quot;)+
+                                  scale_y_continuous(labels = scales::comma)+
+            theme_bw(),
+            tooltip = FALSE)
+        
+        })
+    
+    output$secondaries &lt;- renderPlotly({
+        
+        second_doses &lt;- ggplotly(ggplot(filter(vaccinations, second_dose_taken &gt; 0), 
+                                        aes(x = date, y = second_dose_taken))+
+                                     geom_col()+
+                                     ylab(&quot;People&quot;)+
+                                     xlab(&quot;&quot;)+
+                                     labs(title = &quot;Fully Vaccinated&quot;)+
+                                     scale_y_continuous(labels = scales::comma)+
+            theme_bw(),
+            tooltip = FALSE)
+        
+    })
+}</code></pre>
+</div>
