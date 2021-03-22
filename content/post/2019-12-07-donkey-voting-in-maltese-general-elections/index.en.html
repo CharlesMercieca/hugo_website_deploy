@@ -1,0 +1,281 @@
+---
+title: "Donkey Voting in Maltese General Elections"
+author: ''
+date: '2019-12-07'
+slug: []
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+<script src="{{< blogdown/postref >}}index.en_files/core-js/shim.min.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/react/react.min.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/react/react-dom.min.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/reactwidget/react-tools.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/htmlwidgets/htmlwidgets.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/reactable-binding/reactable.js"></script>
+
+
+<blockquote>
+<p>“have a look at how many MPs are in parliament because of their surname”</p>
+</blockquote>
+<p>It was July 2017, and despite being finally elected as an MP, Hermann Schiavone was still willing to talk about electoral system reform to anyone who would listen. <a href="https://www.maltatoday.com.mt/news/national/78625/now_is_the_time_for_electoral_reform_electoral_expert_says#.XdrPMehKg2x">And in this case, that someone was MaltaToday’s Yannick Pace.</a> Schiavone wanted (and presumably still does) to reform Malta’s STV system for multiple reasons, but the one we’ll discuss here today is donkey voting.</p>
+<div id="what-is-the-donkey-vote" class="section level2">
+<h2>What is the Donkey Vote?</h2>
+<p>The donkey vote hypothesis is that in elections, candidates who feature on the top of voting ballots tend to do better than candidates who feature towards the bottom. Here’s what a typical Maltese general election ballot looks like:</p>
+<p><img src="https://content.maltatoday.com.mt/ui_frontend/thumbnail/684/0/election_2017.jpg" /></p>
+<p>And sure enough, this example from the 2017 general election seems to have the donkey vote trademarks: a deliberate selection of the 1st and 2nd order candidates, before numbering sequentially from the top to the bottom.</p>
+<p>Donkey votes are usually a form of protest in countries where voting is mandatory, as in Australia, so it’s presence in Maltese elections is more peculiar. Instead of apathy, the most commonly flaunted reason is party loyalty: party diehards intentionally keep the vote within the party to increase the probability of transferred votes, maximising that party’s gains.</p>
+</div>
+<div id="the-data" class="section level2">
+<h2>The Data</h2>
+<p>The extent to which donkey voting is influencing who gets elected however is unclear. Some like Schiavone (whose surname coincidentally places him close to the end in ballots) are categorical: “have a look at how many MPs are in parliament because of their surname” he had said in 2017. But a deep dive into the matter is hard to come by. <a href="https://www.maltatoday.com.mt/news/national/17016/welcome-to-the-donkey-vote-20120324#.XdrRS-hKg2x">The sole analytically inclined article I did find was more oriented towards the local elections.</a></p>
+<p>But a treasure trove of Maltese political data <em>does</em> exist and <a href="https://www.um.edu.mt/projects/maltaelections/elections/parliamentary">is hosted here</a> by the University of Malta. Originally started by Professor of Political Science John C. Lane, the project is now in the hands of local scholars and support staff.</p>
+<p>Could we use this to look at the phenomenon? We can certainly try. To study this we’ll load the general elections dataset, spanning all elections between 1921 and 2013. Firstly we’ll look at two variables.</p>
+<p><em>BALL2</em> is the order that candidate appeared in his party’s group on the ballot.</p>
+<p><em>CT1</em> is a candidate’s number of first count votes.</p>
+<p>We’ll use Ballot position as a factor to distinguish different groups, and 1st Count Votes as a dependent variable to see if there is variability in its value between the groups.</p>
+</div>
+<div id="visualising-the-hypothesis-boxplot" class="section level2">
+<h2>Visualising the Hypothesis: Boxplot</h2>
+<p>A boxplot would be a great way to visually set up this hypothesis. To do this, I’ve used a subset of the data which only features elections post 1986. I decided on this split because the current political landscape was cemented at around that time.</p>
+<pre class="r"><code>RecentElections &lt;- MalteseElections %&gt;% 
+  filter(YEAR &gt;= 1986, BALL2 != 0)
+
+ggplot(RecentElections, aes(factor(BALL2), CT1, fill = factor(BALL2)))+
+  geom_boxplot()+ 
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;First Count Votes by Ballot Order&quot;)+
+  ylab(&quot;First Count Votes&quot;)+
+  xlab(&quot;Ballot Order&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>The first thing that’s apparent are several extreme values. This is logical, a handful of candidates are much more successful than many others. To help us visualise things better, we’ll plot the log of First Count Votes for now:</p>
+<pre class="r"><code>ggplot(RecentElections, aes(factor(BALL2), log(CT1), fill = factor(BALL2)))+
+  geom_boxplot()+ 
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;Log of First Count Votes by Ballot Order&quot;)+
+  ylab(&quot;Log of First Count Votes&quot;)+
+  xlab(&quot;Ballot Order&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>What the Donkey vote hypothesis suggests is that the median (bold line in the bars) should be higher in the first few ballot positions compared to the others. And that does not seem to be the case.</p>
+<p>We can visualise our experiment in a slightly different way by doing away with the boxplots, and drawing a transparent dot for each candidate, with the count of votes on the y-axis and the ballot position on the x-axis.</p>
+<pre class="r"><code>RecentElections %&gt;% 
+  ggplot(aes(factor(BALL2), log(CT1), col = factor(BALL2)))+
+  geom_point(position = &quot;jitter&quot;, alpha = 0.2)+
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;Log of First Count Votes by Ballot Order&quot;)+
+  ylab(&quot;Log of First Count Votes&quot;)+
+  xlab(&quot;Ballot Order&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>What we’ll try to test is if the distribution of those dots in each group is different than the distribution of the whole data. Instead of looking at it visually, we can make it more rigorous by using a statistical test. Since we’re interested in seeing whether the variation between groups (ballot order) is greater than the variation we see within groups (the spread of CT1 in the same group), the logical test would be the one taught in every undergraduate statistics course: <a href="https://www.youtube.com/watch?v=oOuu8IBd-yo">ANOVA</a>.</p>
+<p>But before we get to that, let’s fix two things in our data. Firstly, we’ll only analyse data for the two main political parties, since independent candidates and small parties routinely contest districts with only a single candidate (in other words, ballot position is always 1). Secondly, we’ll group any position after 10 into a single group called “10+”.</p>
+<p>The rationale for this is simple. Every election year and district combination will have a ballot position 1, but very few will have a ballot position of 19 or 18. This step will ensure that we’ll be comparing groups with around the same number of data points.</p>
+<pre class="r"><code># First let&#39;s filter only for PN/PL and recode positions after 10
+BigPartiesOnly &lt;- RecentElections %&gt;% 
+  filter(PARTY %in% c(13, 15)) %&gt;% 
+  mutate(BallotPos = factor(ifelse(BALL2 &gt;=10, &quot;10+&quot;, BALL2), 
+                            levels = c(&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;, &quot;6&quot;, &quot;7&quot;,
+                                       &quot;8&quot;, &quot;9&quot;, &quot;10+&quot;)))</code></pre>
+<p>Our data now looks like this:</p>
+<pre class="r"><code>BigPartiesOnly %&gt;% 
+  ggplot(aes(BallotPos, log(CT1), col = BallotPos))+
+  geom_point(position = &quot;jitter&quot;, alpha = 0.2)+
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;Log of First Count Votes by Ballot Order&quot;)+
+  ylab(&quot;Log of First Count Votes&quot;)+
+  xlab(&quot;Ballot Position&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>Now, time to run the test!</p>
+<pre class="r"><code># Conduct the analysis of variance test
+ANOVA &lt;- aov(log(CT1) ~ BallotPos, data = BigPartiesOnly)
+# Summary of the analysis
+summary(ANOVA)</code></pre>
+<pre><code>##               Df Sum Sq Mean Sq F value Pr(&gt;F)  
+## BallotPos      9     41   4.558   2.247 0.0171 *
+## Residuals   1569   3183   2.028                 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>And what do you know, a modest F-value! If there was no difference in first count votes between ballot position, the F-value, which is the ratio of the differences between the groups divided by the difference within the groups, would be close to 1. And our p-value is low, indicating that the probability of obtaining this result due to chance is also low.</p>
+<p>But all this tells us is that at least one of our groups is different from all the others. To see where the difference lies, we’ll have to dig deeper with a post-hoc test. What post-hoc tests do is compare all the different permutations of pairs together. However the issue with carrying out so many statistical tests is that eventually, one of them might end up being significant purely by chance when it is not, so many different frameworks of how to carry out post-hoc tests safely have been devised. In this case, we’ll use Tukey’s Honestly Significant Difference, invented by Princeton mathematician <a href="https://en.wikipedia.org/wiki/John_Tukey">John Tukey (who also invented the boxplot and coined the term “bit”, among many other things.</a></p>
+<pre class="r"><code># Run Tukey&#39;s HSD on the ANOVA
+TukeyHSD(ANOVA) %&gt;% 
+  tidy() %&gt;% 
+  filter(adj.p.value &lt; 0.05)</code></pre>
+<pre><code>## # A tibble: 1 x 7
+##   term      contrast null.value estimate conf.low conf.high adj.p.value
+##   &lt;chr&gt;     &lt;chr&gt;         &lt;dbl&gt;    &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;       &lt;dbl&gt;
+## 1 BallotPos 10+-1             0   -0.523    -1.01   -0.0399      0.0218</code></pre>
+<p>Since the output is literally 45 different statistical tests, I only filtered out for rows that are significant… which turned out to be only one: the comparison between the first ballot position and the ballot positions after the 10th.</p>
+<p>What this tells us is that there might be some difference in how first count votes are distributed between candidates who appear first and those who appear in the bottom of the ballot, but these differences don’t extend to candidates who appear first and those who appeared in any other position combination. All in all, this is weak evidence for donkey voting.</p>
+<p>It might be flimsier still. If the 1st and 2nd choices are (likely) deliberate, doesn’t the effect of the donkey vote come into effect after a few counts? While all we’ve shown is that ballot position is slightly relevant in first counts.
+So, let’s see if, say, the 5th count, when some of those transfers will have come into effect, shows a difference.</p>
+<div id="count-5" class="section level3">
+<h3>Count 5…</h3>
+<pre class="r"><code>BigPartiesOnly %&gt;% 
+  mutate(Count5 = as.numeric(Ct5)) %&gt;% 
+  ggplot(aes(BallotPos, Count5, fill = BallotPos))+
+  geom_boxplot()+
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;5th Count Votes (as percentage of party) by Ballot Order&quot;,
+       subtitle = &quot;Only PN and PL Candidates&quot;)+
+  ylab(&quot;5th Count Votes&quot;)+
+  xlab(&quot;Ballot Order&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>If anything, this graph shows less going on. Because those high 1st count vote values have ben transferred, we can do away with transforming our data. And another ANOVA shows no effect of ballot position on 5th count votes.</p>
+<pre class="r"><code>summary(aov(as.numeric(Ct5)~BallotPos, data = BigPartiesOnly))</code></pre>
+<pre><code>##               Df    Sum Sq Mean Sq F value Pr(&gt;F)
+## BallotPos      9 1.122e+07 1246171   1.061  0.389
+## Residuals   1569 1.843e+09 1174696</code></pre>
+</div>
+</div>
+<div id="lets-see-mean-seated-as-a-function-of-ballot-order" class="section level2">
+<h2>Let’s see mean seated as a function of ballot order…</h2>
+<p>Let’s approach this from another direction, and calculate the proportion of candidates seated for each ballot order. To do this, we’ll first filter where the <em>Seated</em> variable is either 0 (not seated) or 1 (seated) in our dataset. We do it this way because 2 codes for a candidate seated in the middle of a parliamentary session to replace a member who stepped down for instance.</p>
+<p>Next we’ll use a handy quirk of R. When you calculate the mean of a 0, 1 categorical vector, the result is the percent of the 1 occurring.</p>
+<pre class="r"><code>BigPartiesOnly %&gt;% 
+  filter(SEATED &lt;= 1) %&gt;% 
+  group_by(BallotPos) %&gt;% 
+  summarise(PercSeated = mean(SEATED)) %&gt;% 
+  ggplot(aes(BallotPos, PercSeated))+
+  geom_col()+
+  scale_y_continuous(labels=scales::percent)+
+  labs(title = &quot;Proportion of Candidates Seated for Each Ballot Position&quot;,
+       subtitle = &quot;Only PN and PL Candidates&quot;)+
+  ylab(&quot;Percentage Seated&quot;)+
+  xlab(&quot;Ballot Order&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p>And it seems all ballot positions have a roughly 20-30% chance of being elected, with positions 1, 2, 4 and 7 being roughly equal. It is position 8 that in fact seems the lowest. And while it’s not drastically lower, let’s try a Chi-squared test to be sure. After all, this is an entirely different hypothesis now: we’re saying that ballot position might have an influence on being seated in parliament (1) or not (0).</p>
+<pre class="r"><code>Seated &lt;- BigPartiesOnly %&gt;% 
+  filter(SEATED &lt;= 1)
+
+
+chisq.test(BigPartiesOnly$SEATED, BigPartiesOnly$BallotPos)</code></pre>
+<pre><code>## Warning in chisq.test(BigPartiesOnly$SEATED, BigPartiesOnly$BallotPos): Chi-
+## squared approximation may be incorrect</code></pre>
+<pre><code>## 
+##  Pearson&#39;s Chi-squared test
+## 
+## data:  BigPartiesOnly$SEATED and BigPartiesOnly$BallotPos
+## X-squared = 23.871, df = 18, p-value = 0.1593</code></pre>
+<p>And since the p-value is large, we can’t say that the proportion of candidates seated is different according to the order with which they appeared in the ballot.</p>
+</div>
+<div id="the-nuanced-conclusion" class="section level2">
+<h2>The Nuanced Conclusion</h2>
+<p>So, what have we learned? Well, if you contested Maltese elections for either of the two big parties since 1986, the order with which you appeared on the ballot largely didn’t influence your first count votes. The sole exception to this seems to be in the bottom few positions, and even then, the difference is only between these and the top first position.</p>
+<p>The difference is practically non-existent in your votes at the fifth count, and, perhaps most importantly, whether you are seated in parliament or not seems to be independent of your ballot position. This second conclusion suggests that even if donkey voting exists, it does not appear to shape which candidates get elected. Intuitively, the reason could be simple: each party only gets 2-3 seats per district, and voters usually start to donkey vote after a few deliberate choices.</p>
+<p>Anyway, since we do have a dataset of all Maltese elections spanning 1921 to 2013 loaded, let’s have some more fun…</p>
+<div id="top-performing-candidates" class="section level3">
+<h3>Top performing candidates</h3>
+<p>Which candidates get the most votes?</p>
+<pre class="r"><code>MalteseElections %&gt;% 
+  arrange(desc(TOPS)) %&gt;% 
+  select(NAME, YEAR, Dist, TOPS) %&gt;% 
+  head(20) %&gt;% 
+  reactable()</code></pre>
+<div id="htmlwidget-1" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-1">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"NAME":["Muscat, Joseph","Muscat, Joseph","Fenech Adami, Edward","Gonzi, Lawrence","Fenech Adami, Eddie","Mintoff, Dom","Fenech Adami, Eddie","Fenech Adami, Eddie","Sant, Alfred","Fenech Adami, Eddie","Fenech Adami, Eddie","Sant, Alfred","Fenech Adami, Eddie","Fenech Adami, Edward","Fenech Adami, Eddie","Sant, Alfred","Sant, Alfred","Mintoff, Dom","Mifsud Bonnici, Karmenu","Mintoff, Dom"],"YEAR":[2013,2013,2003,2008,1998,1981,1987,1996,2008,1992,1981,1996,1998,2003,1992,2003,1998,1976,1987,1987],"Dist":[2,4,8,9,8,2,8,8,1,8,8,1,11,11,11,1,1,2,1,2],"TOPS":[13968,12202,11537,10901,10533,10469,10264,9692,9404,9219,9177,9129,9011,8934,8634,8590,8270,8082,8034,8031]},"columns":[{"accessor":"NAME","name":"NAME","type":"character"},{"accessor":"YEAR","name":"YEAR","type":"numeric"},{"accessor":"Dist","name":"Dist","type":"numeric"},{"accessor":"TOPS","name":"TOPS","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"ce46baa2b48a33972e99b0493142f9ac","key":"ce46baa2b48a33972e99b0493142f9ac"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<p>Party leaders.</p>
+</div>
+<div id="when-has-contesting-multiple-elections-been-a-thing" class="section level3">
+<h3>When has contesting Multiple Elections been a thing?</h3>
+<p>Some candidates contest more than one district, either to improve the odds for themselves, or to increase first count votes for their party. Has the proportion of candidates who contested more than one district been changing through the years?</p>
+<pre class="r"><code>DistrictsContested &lt;- MalteseElections %&gt;% 
+  filter(NAME != &quot;* Non-Trans. *&quot;) %&gt;% #Filter out non transferable votes
+  group_by(NAME, YEAR) %&gt;%
+  summarise(count = n()-1) %&gt;% 
+  group_by(YEAR) %&gt;% 
+  summarise(PercContested2 = mean(count))</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;NAME&#39;. You can override using the `.groups` argument.</code></pre>
+<pre class="r"><code>ggplot(DistrictsContested, aes(y = PercContested2, x = YEAR))+
+  geom_point()+
+  geom_line()+
+  scale_y_continuous(labels=scales::percent)+
+  labs(title = &quot;Proportion of Candidates Contesting 2 Districts&quot;)+
+  ylab(&quot;Percentage of Candidates&quot;)+
+  xlab(&quot;Year&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p>Looks like it was rarely a thing before the 1960’s.</p>
+</div>
+<div id="which-districts-are-the-most-oversubscribed" class="section level3">
+<h3>Which districts are the most oversubscribed?</h3>
+<p>The two main parties make no attempts to try and limit their candidates in a district, and they often end up fielding many more candidates than available seats. Is this phenomenon steady across districts, and how has it evolved over time?</p>
+<pre><code>## `summarise()` has grouped output by &#39;YEAR&#39;, &#39;Dist&#39;. You can override using the `.groups` argument.</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>So around 4-5 candidates per available seat seems to be the norm in recent elections. There was a slight uptick in the 1960’s, and this probably has to do with the fact that those times were some of the only elections where we had a true multi-party system, with splinter parties led by Toni Pellegrini and Herbert Ganado. <a href="https://en.wikipedia.org/wiki/1962_Maltese_general_election">The 1962 election saw no less than 5 parties securing seats.</a></p>
+<p>Interestingly, my district, Gozo, seems to have the lowest number of candidates per seat.</p>
+</div>
+<div id="who-contested-the-most-elections" class="section level3">
+<h3>Who contested the most elections?</h3>
+<pre class="r"><code>MalteseElections %&gt;% 
+  group_by(NAME) %&gt;% 
+  summarise(TimesContested = max(AGAIN)) %&gt;% 
+  arrange(desc(TimesContested)) %&gt;% 
+  head(10) %&gt;% 
+  reactable()</code></pre>
+<div id="htmlwidget-2" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-2">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"NAME":["Mintoff, Dom","Caruana, Carmelo","Cassar, Guze","Barbara, Agatha","Borg Olivier, Giorgio","Buttigieg, John","Camilleri, Gius. Maria","Cassar Galea, Joseph F.","Cauchi, Amabile","Debono Grech, Joseph"],"TimesContested":[14,11,11,10,10,10,10,10,10,10]},"columns":[{"accessor":"NAME","name":"NAME","type":"character"},{"accessor":"TimesContested","name":"TimesContested","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"356a9d7647608ad11b7f3fafc0edffe0","key":"356a9d7647608ad11b7f3fafc0edffe0"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<p>The record holder seems to be Mintoff, with a remarkable 14 elections contested. Many of the names here are interesting for one reason or another, but I think Amabile Cauchi is the one most deserving of a mention. <a href="https://timesofmalta.com/articles/view/-and-still-more-monkeys-through-the-history-of-malta.517787">The Gozitan MP kept a pet monkey, which one day escaped and climbed atop the steeple of Ghajnsielem’s old parish church.</a></p>
+</div>
+<div id="gender-balance" class="section level3">
+<h3>Gender Balance</h3>
+<p>How has the proportion of women that contest the general elections evolved?</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
+<p>Well, prior to 1947, it was 0, since women couldn’t even vote before this. It remained relatively meagre up until the mid 1990’s, and now is trending upwards.</p>
+</div>
+<div id="candidates-contesting-through-the-years" class="section level3">
+<h3>Candidates contesting through the years</h3>
+<p>Which leads to another question. Has the number of candidates contesting changed through the years?</p>
+<pre class="r"><code>MalteseElections %&gt;% 
+  group_by(YEAR) %&gt;% 
+  distinct(NAME) %&gt;% 
+  tally() %&gt;% 
+  ggplot(aes(factor(YEAR), n))+
+  geom_bar(stat = &quot;identity&quot;)+
+  theme(axis.text.x = element_text(angle = 60))+
+  labs(title = &quot;Number of Candidates Contesting the General Election&quot;)+
+  ylab(&quot;Number of Candidates&quot;)+
+  xlab(&quot;Election Year&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-18-1.png" width="672" /></p>
+<p>Since this is a distinct count, candidates who contest 2 districts will only be counted once. And perhaps unsurprisingly, the record belongs to the 1962 general election, which saw 231 names contest. It’s been in the 175 candidate region since then.</p>
+<p>The post war 1945 election had the lowest number of candidates (16).</p>
+</div>
+</div>
+<div id="incumbency-effect" class="section level2">
+<h2>Incumbency Effect</h2>
+<p>A rich body of political science tells us that incumbency is a big boost in electability in democracies across the world. How big of a boost is it here?</p>
+<pre class="r"><code>MalteseElections %&gt;% 
+  filter(INCUMB != 99) %&gt;% 
+  ggplot(aes(factor(INCUMB), CT1, fill = factor(INCUMB)))+
+  geom_boxplot()+
+  theme(legend.position = &quot;none&quot;)+
+  labs(title = &quot;Effect of Incumbency on 1st Count Votes&quot;)+
+  ylab(&quot;First Count Votes&quot;)+
+  xlab(&quot;Incumbent&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-19-1.png" width="672" /></p>
+<pre class="r"><code>Incumbency &lt;- MalteseElections %&gt;% 
+  filter(INCUMB != 99)
+
+lm(CT1 ~ INCUMB, data = Incumbency) %&gt;% 
+  summary()</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = CT1 ~ INCUMB, data = Incumbency)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -1674.9  -412.7  -239.3   248.2 12279.1 
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   453.73      19.91   22.79   &lt;2e-16 ***
+## INCUMB       1235.20      35.03   35.26   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 1054 on 4136 degrees of freedom
+## Multiple R-squared:  0.2311, Adjusted R-squared:  0.231 
+## F-statistic:  1243 on 1 and 4136 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p>What the boxplot and linear regression tell us is that the average candidate in a Maltese General Election gets 453 votes. If that candidate is an incumbent, he or she gets another additional 1235 votes - quite a decent boost that’s equivalent to two thirds the quota usually.</p>
+</div>
