@@ -1,16 +1,9 @@
 ---
-comments: false
-subtitle: Why you'd want to go on a date with me
 title: About me
+comments: false
 ---
 
-My name is Inigo Montoya. I have the following qualities:
 
-- I rock a great mustache
-- I'm extremely loyal to my family
+Hi! My name is Charles Mercieca, and this blog is intended to be a repository of all my ideas.
 
-What else do you need?
-
-### my history
-
-To be honest, I'm having some trouble remembering right now, so why don't you just watch [my movie](http://en.wikipedia.org/wiki/The_Princess_Bride_%28film%29) and it will answer **all** your questions.
+What you’ll find me doing here is mostly using data analysis in general and R specifically to understand what gets me curious in the world around me.
