@@ -1,0 +1,121 @@
+---
+title: "Is There a Yellow Skittle Conspiracy?"
+date: '2020-05-06'
+slug: []
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(purrr)
+library(readxl)
+library(lubridate)
+```
+
+## How fair art thou?
+
+I could never get over this nagging suspicion that my least favourite skittle colour, yellow, popped up more than the other ones. And so I did my solemn data analyst's duty, and recorded the data... before forgetting about it for a long time. 
+
+Fast forward to two whole years later, and as I was deleting some old files, I came across the spreadsheet I had been keeping.
+
+Well, the time has come to address this once and for all. Now, skittle counting seems to have [a long and illustrious history on the internet](https://www.reddit.com/r/dataisbeautiful/comments/2o2c8t/oc_comparison_of_two_bags_of_skittles/), so I won't be the first to go down this road. But instead of tearing open a hundred packets, we'll go about this analysis in a different way.
+
+First, let's look at our gathered data. Each of the 9 rows is an individual bag, complete with batch number, date, and the count of respective colours. 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+read_excel("C:/Users/Charles Mercieca/Documents/RProjects/Skittles/Input/SkittlesDistribution.xlsx") %>% 
+  filter(Size == "55g") %>% 
+  mutate(Date = ymd(Date))
+```
+
+If we were to generate a quick summary statistic, we'd get the following:
+```{r include=FALSE}
+ObservedSkittlesDistribution <- read_excel("C:/Users/Charles Mercieca/Documents/RProjects/Skittles/Input/SkittlesDistribution.xlsx") %>% 
+  filter(Size == "55g") %>% 
+  select(Date:Purple) %>% 
+  gather("Colour", "Count", -Date) %>%
+  group_by(Colour) %>% 
+  summarise(mean = mean(Count))
+```
+
+```{r}
+ObservedSkittlesDistribution
+```
+
+
+Now the question becomes, given a completely random process of making and bagging skittles, is that value for yellow suggestive of a bias? We can arrive to this answer in a few different ways. The traditional method would be to use mathematical functions, but in this case, we'll use a statistical computing approach and simulate a completely random skittles factory that generates and bags skittles in a normally distributed way. We'll know this for sure because we'll code it to be completely fair!
+
+## Building a Skittles Factory!
+
+Let's simulate making 100,000 bags of 50 skittles each. To fill the bags, we'll sample with replacement from the five colours available. Since no custom probability argument is provided for R's default sample function, it will give each colour the same probability of being drawn.
+
+```{r}
+sims <- crossing(sim = 1:100000,
+                 skittle = 1:50)
+
+
+
+sims <- sims %>% mutate(colour = sample(c("Yellow", "Red", "Orange", "Green", "Purple"),
+                                        size = nrow(sims),
+                                        replace = TRUE))
+```
+
+What we end up with is a 5 million row long dataframe, of 100,000 simulations, with each simulation comprising of 50 skittles.
+
+```{r}
+head(sims)
+```
+
+To make the data easier to analyse, we can then group by each simulation and colour, and count the number of skittles:
+
+```{r}
+gathered <- sims %>%
+  group_by(sim, colour) %>%
+  summarise(n = n())
+gathered
+```
+
+The beauty of this approach is that now, we have the ability to plot a probability mass function of the distribution of any skittle colour. So for example, we can draw a histogram of the observed distributions for yellow, together with the mean count of yellow from our observed data (black line):
+
+```{r}
+yellowMean <- ObservedSkittlesDistribution %>% 
+  filter(Colour == "Yellow") %>% pull(mean)
+
+Yellow <- gathered%>%
+  filter(colour == "Yellow") %>% 
+  ggplot(aes(n)) +
+  geom_histogram(fill = "#FEEE22", bins = 70)+
+  geom_vline(xintercept = yellowMean)+
+  theme_bw()+
+  labs(title = "Values of Yellow Skittles if distribution was due to chance vs. Observed",
+       subtitle = "100,000 simulations")+
+  xlab("Yellow Skittles per Bag") + 
+  ylab("Bags")
+Yellow
+```
+
+What we can see is that in a perfectly random process, the most common number of yellow skittles is 10, matching with the commonsense probability of 1/5 * 50. Yet, this is only the case for 13,000 bags out of 100,000. In other instances, it can be a bit off to each side, and in some extreme cases, we might have as few as 2 yellow skittles and as many as 20 yellow skittles in a single bag. 
+
+This is also a great visual display of what a p-value really is: the probability of observing a result this extreme given a null distribution. What's more, to get a p-value out of this, all we'd need to do is count the number of times the mean of yellow skittles we observed (10.5) is greater than the number of times we'd get a bag with 10.5 skittles or more. Or in R terms:
+
+```{r}
+sum(yellowMean >= gathered %>% filter(colour == "Yellow") %>% pull(n))/100000
+```
+
+Which tells us that we'd observe a value this extreem in 58% of the cases, even if the skittles factory was completely fair. 
+
+Simulations like these also make it easy to calculate quantiles. 
+
+```{r}
+gathered %>% 
+  group_by(colour) %>% 
+  summarise(lowerQ = quantile(n, probs = 0.025),
+            upperQ = quantile(n, probs = 0.975))
+```
+
+
+We can then say that in 95% of the bags we open, we'll have no less than 5 or no more than 16 skittles of each colour. They're all identical because with our 100,000 simulations, the law of large numbers has started to apply.
