@@ -1,0 +1,315 @@
+---
+title: "Impact of COVID19 on Air Malta's Operations"
+author: ''
+date: '2020-10-01'
+slug: []
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p>I’ve wanted to analyse something airline related for a while now, but getting my hands on data that was relevant and interesting to me was challenging. <a href="https://www.tylermw.com/loading-and-visualizing-opensky-network-data-in-r/">Then I read this blog post</a> and discovered the wonderful world of opensky-network.org and their REST API.
+The focus of this post will be to:</p>
+<ul>
+<li>Come up with several numerical assessments to Air Malta’s operations.</li>
+<li>Quantify the COVID-19 Pandemic’s impact on Air Malta.</li>
+</ul>
+<p>To do this, I’ve decided to examine records of Air Malta flights from 21st March to September 21st in both 2019 and 2020. The 2019 season was one of Air Malta’s busiest (if not the busiest), and this will be what we’ll use to answer question 1. The contrast with the 2020 season will be the basis for question 2.</p>
+<div id="getting-the-data" class="section level2">
+<h2>Getting the data</h2>
+<p><a href="https://opensky-network.org/">OpenSky Network</a> are a non-profit that track and record aircraft ADS-B signals. ADS-B is the latest evolution of aircraft transponders. While older technology depended on an ‘interrogator signal’ from a ground-based unit, ADS-B units automatically self-transmit hundreds of data fields at a regular interval, allowing a more complete picture for both air traffic control and other aircraft.</p>
+<div id="using-opensky-network.orgs-api" class="section level3">
+<h3>Using Opensky-Network.Org’s API</h3>
+<p>Using the approach in the linked blog post as a launching pad, I came up with a function that takes the an aircraft’s 24 bit ICAO identifier, the begin date and end date as arguments that then get pushed to an API call using R’s httr library.</p>
+<p>The period argument is purely there because the API has a 30 day limit, so I constructed the function in such a way as to create as many iterations in a for loop as are required to span the dates provided while staying in that limit (i.e. if you specify a timespan of 300 days, with a period of 30, the for loop will run 300/30, or 10 iterations.)</p>
+<pre class="r"><code>username &lt;- &quot;GetYourOwn!&quot;
+password &lt;- &quot;It&#39;s Free :)&quot;
+
+getFlights &lt;- function(icao24, begin, end, period){
+
+  #Calculates range as seconds between begin &amp; end points, then divides by seconds in a day... 
+  range &lt;- (as.numeric(as.POSIXct(end))- as.numeric(as.POSIXct(begin))) / 86400
+  
+  #...and rounds up to iterations needed for the below for loop.
+  iterations &lt;- ceiling(range/period)
+  
+  #Create empty data frame to hold results
+  df.total &lt;- data.frame()
+  
+  for(i in 1:iterations){
+    
+    path &lt;- glue(&quot;https://{username}:{password}@opensky-network.org/api/flights/aircraft?&quot;)
+    
+    request &lt;- GET(url = path, 
+                  query = list(
+                    icao24 = icao24,
+                    begin = as.numeric(as.POSIXct(begin)),
+                    end = as.numeric((as.POSIXct(begin) + (86400 * as.numeric(period))))
+                    ))
+    
+    response &lt;- content(request, as = &quot;text&quot;, encoding = &quot;UTF-8&quot;) 
+    table &lt;- data.frame(fromJSON(response, flatten = TRUE))
+    df.total = rbind(df.total, table)
+    begin &lt;- as.POSIXct(begin) + (86400 * as.numeric(period))
+  }
+  return(df.total)
+}</code></pre>
+</div>
+<div id="running-function-iteratively-using-purrr" class="section level3">
+<h3>Running Function Iteratively Using purrr</h3>
+<p>Then I used the pmap function from the purrr package to run the getFlights function iteratively for each airplane Air Malta operates (or operated) in the timespans.</p>
+<pre class="r"><code>icao24 &lt;- airframes$icao24
+begin &lt;- &quot;2020-03-20&quot;
+end &lt;- &quot;2020-09-23&quot;
+period &lt;- 20
+
+argList &lt;- list(icao24, begin, end, period)
+
+year2020 &lt;- pmap_dfr(argList, getFlights)</code></pre>
+</div>
+</div>
+<div id="secondary-data-sources" class="section level2">
+<h2>Secondary Data Sources</h2>
+<p>Besides the ADS-B logs, I also included a table which I made in excel mapping the 24 bit identifier to the national 9H registration, the airframe’s serial number, aircraft type and configuration according to airfleets.net.</p>
+<p>However after noticing that this website listed some aircraft as having a single class 180 seat dense layout (which I know not to be the case for Air Malta), I treated all A320’s (including the NEO’s) as having a 2 class 24 business seat/144 economy seat layout. The single A319, which only saw operation in 2019, was assumed as having a 12 business seat/ 129 economy seat layout.</p>
+<p>Another enrichment was more detailed airport information. Besides the ICAO 4 letter airport identifier present in the data, I got this list from <a href="https://openflights.org/data.html">openflights.org</a> to add airport name, city, and latitude/longitude points.</p>
+<div id="additional-data-enrichment" class="section level3">
+<h3>Additional Data Enrichment</h3>
+<p>While mostly happy, I did notice the data had a few issues of missing airports. On further inspection, this seemed to be the case with either very short flights (Catania and Palermo), or flights to Africa/Asia where coverage might not be as good (Tel Aviv, Casablanca). Since I know where each flight number was heading to, or coming from, I manually recoded the problem flights.</p>
+<p>Then I joined the logs to the airframe table, allowing us to see what type of aircraft operated which route, and joined the airport’s table twice, once for arrivals and once for departures, to get the additional fields.</p>
+<pre class="r"><code>flights2020 &lt;- year2020 %&gt;% 
+  mutate(
+         callsign = str_trim(callsign),
+         estDepartureAirport = case_when(is.na(.$estDepartureAirport) 
+                         &amp; .$estArrivalAirport != &quot;LMML&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC641&quot; ~ &quot;LICC&quot;,
+                         callsign == &quot;AMC643&quot; ~ &quot;LICC&quot;,
+                         callsign == &quot;AMC725&quot; ~ &quot;GMMN&quot;,
+                         callsign == &quot;AMC663&quot; ~ &quot;LICJ&quot;,
+                         callsign == &quot;AMC685&quot; ~ &quot;DTTA&quot;,
+                         callsign == &quot;AMC828&quot; ~ &quot;LLBG&quot;,
+                         callsign == &quot;AMC827&quot; ~ &quot;LLBG&quot;,
+                         callsign == &quot;AMC829&quot; ~ &quot;LLBG&quot;,
+                         callsign == &quot;AMC826&quot; ~ &quot;LLBG&quot;,
+                         TRUE ~ .$estDepartureAirport),
+         estArrivalAirport = case_when(is.na(.$estArrivalAirport) 
+                         &amp; .$estDepartureAirport != &quot;LMML&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC642&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC828&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC724&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC684&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC640&quot; ~ &quot;LMML&quot;,
+                         callsign == &quot;AMC826&quot; ~ &quot;LMML&quot;,
+                         TRUE ~ .$estArrivalAirport),
+         ) %&gt;% 
+  left_join(airframes) %&gt;% 
+  mutate(dateFirst = lubridate::as_datetime(firstSeen),
+         dateLast = lubridate::as_datetime(lastSeen),
+         EstFT = difftime(dateLast,dateFirst),
+         Seats = Econ + Business) %&gt;% 
+  #Join Departure Airport Info
+  left_join(airports, by = c(&quot;estDepartureAirport&quot; = &quot;ICAO&quot;)) %&gt;% 
+  rename(DepName = Name,  DepCity = City, 
+         DepCountry = Country, DepLat = Lat, DepLon = Lon) %&gt;% 
+  #Join Arrival Airport Info
+  left_join(airports, by = c(&quot;estArrivalAirport&quot; = &quot;ICAO&quot;)) %&gt;% 
+  rename(ArrName = Name,  ArrCity = City, 
+         ArrCountry = Country, ArrLat = Lat, ArrLon = Lon) %&gt;% 
+  select(&quot;callsign&quot;, &quot;estDepartureAirport&quot;, &quot;dateFirst&quot;, &quot;estArrivalAirport&quot;, 
+         &quot;dateLast&quot;, &quot;reg&quot;, &quot;Type&quot;, &quot;Econ&quot;, &quot;Business&quot;, &quot;Seats&quot;, &quot;EstFT&quot;, &quot;DepName&quot;, 
+         &quot;DepCity&quot;, &quot;DepCountry&quot;, &quot;DepLat&quot;, &quot;DepLon&quot;, &quot;ArrName&quot;, &quot;ArrCity&quot;, 
+         &quot;ArrCountry&quot;, &quot;ArrLat&quot;, &quot;ArrLon&quot;)</code></pre>
+</div>
+</div>
+<div id="a-note-on-data-in-the-airline-industry" class="section level2">
+<h2>A note on Data in the Airline Industry</h2>
+<p>The airline industry pioneered the use of data to inform their decisions decades before it became “the thing” to do for other businesses. The reasons for this are many and varied.
+Airlines typically (at least American ones, where the trend started) had close to real time booking systems which were easy candidates to switch to computers (American Airlines was one of IBM’s first customers in 1946). Their management, operating expensive airplanes for a living, were also more at ease with the idea of dishing out money for “technology”, and it didn’t take long for them to realise that holding on to that booking data over time could be the basis of historic models for passenger demand.</p>
+<p>Most of this reached a culmination at American Airlines, under the guidance of its legendary CEO Robert Crandall. Using their historic data, Crandall and his team offered the first frequent flier program, which became the basis of loyalty programs in other industries. And to top it all off, they adopted, and invented, most of what would become the field of <a href="https://en.wikipedia.org/wiki/Yield_management">revenue yield management</a>.</p>
+<p>What this means for us is that there are several industry standard metrics like ASK and seat capacity which we’ll attempt to use.</p>
+</div>
+<div id="air-malta-operations" class="section level2">
+<h2>Air Malta Operations</h2>
+<div id="how-many-flights-a-week-does-air-malta-operate" class="section level3">
+<h3>How Many flights a week does Air Malta Operate?</h3>
+<p>At the begining of April 2019, Air Malta operated around 250 flights a week, inching above 300 a week in June, and hovering around 350 in September.</p>
+<p>2020 was markedly different, with half the period seeing only around 30 flights a week, before reaching a summer plateau of around 150 weekly flights.</p>
+<pre><code>## `summarise()` has grouped output by &#39;year&#39;. You can override using the `.groups` argument.</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+</div>
+<div id="what-is-the-fleet-utilization-like" class="section level3">
+<h3>What is the fleet utilization like?</h3>
+<p>Parked airplanes do not make any money, so to maximise profit airlines try to keep them flying as much as possible. One metric is the average daily utilization in hours: that is, on an average day, how many hours does this airframe fly?</p>
+<p>The below are block hours (from one gate to another, including taxi time on the ground).</p>
+<pre><code>## `summarise()` has grouped output by &#39;year&#39;. You can override using the `.groups` argument.</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>Most of the fleet in 2019 was averaging around 9 hours, with three airplanes exceeding 10 hours. 9H-NEB and 9H-NEC have such relatively low hours because they joined the fleet much later in the season (beginning of August and September). 9H-AEI was sold to a Croatian airline and 9H-AEJ was reportedly scrapped at Kemble.</p>
+<p>Interestingly, what little flying there was in 2020 seems to have of been mostly flown by the newer A320 Neo’s Air Malta is acquiring. This makes sense. Besides sipping a bit less fuel (not that fuel was the main cost for airlines in 2020), new airplanes tend to have a “grace” period where very little goes wrong with them. There’s also a healthy gap to expensive maintenance checks which come later in an airframe’s life, so putting off that cost to a future day when it might be less rainy is sound fleet planning rationale.</p>
+<p>The 2019 numbers are also fairly in line with what is the norm in the industry (<a href="http://web.mit.edu/airlinedata/www/2019%2012%20Month%20Documents/Aircraft%20and%20Related/Total%20Fleet/Average%20Daily%20Block%20Hour%20Utilization%20of%20Total%20Operating%20Fleet.htm">for reference see these numbers from North American Carriers here.</a>)</p>
+<p>We can also do the same with the average daily number of sectors operated per airframe:</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+</div>
+<div id="available-seat-kilometres" class="section level3">
+<h3>Available Seat Kilometres</h3>
+<p>The standard metric in the aviation industry for comparing one airline to another (or one airline’s year to the past one) is Available Seat Kilometres. So, for example, if an airline flies an airplane with 150 seats on a 1,000 kilometre route, that route’s ASK is 150,000 units. The main strength of this metric is that it allows direct apples to apples comparisons of capacity with different sorts of airlines.</p>
+<p>The seats portion is fairly straightforward, since we know which airframe flew which route, and so which seating configuration was on a particular flight. We can calculate route distances because our additional enrichments allowed us to get longitude/latitude pairs for each departure and arrival airport. Simply piping these to the geosphere package’s distGeo function allows the calculation of the <a href="https://gisgeography.com/great-circle-geodesic-line-shortest-flight-path/">geodesic distance</a> (the shortest path between two points on an ellipsoid).</p>
+<pre class="r"><code> kpiASK &lt;- flights %&gt;% 
+     mutate(dist = distGeo(cbind(DepLon, DepLat),
+                           cbind(ArrLon, ArrLat))/1000,
+            ASK = Seats*dist)</code></pre>
+<p>We can then plot this over weeks, to see how both ASK evolves over the summer season and 2020’s impact on Air Malta’s capacity:</p>
+<pre class="r"><code>kpiASK %&gt;% 
+   group_by(year, week) %&gt;% 
+   summarise(TotalASK = sum(ASK, na.rm=T) / 1000000) %&gt;% 
+ggplot(aes(x=week, y = TotalASK, col = factor(year), group = year))+
+   geom_line()+
+  labs(title = &quot;Air Malta Available Seat Kilometres per Week&quot;,
+       col = &quot;Year&quot;) +
+  ylab(&quot;ASK (Million)&quot;)+
+  xlab(&quot;Week&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p>We can also sum up ASK over the entire duration of the flying season to calculate the overall difference in capacity.</p>
+<pre class="r"><code>kpiASK %&gt;% 
+   group_by(year) %&gt;% 
+   summarise(TotalASK = sum(ASK, na.rm=T) / 1e9) %&gt;% 
+ggplot(aes(x=year, y=TotalASK, label=round(TotalASK,3))) + 
+  geom_point(stat=&#39;identity&#39;, fill=&quot;black&quot;, size=5)  +
+  geom_segment(aes(y = 0, 
+                   x = year, 
+                   yend = TotalASK, 
+                   xend = year), 
+               color = &quot;black&quot;) +
+  geom_text(color=&quot;black&quot;, size=3.5, nudge_x = .2) +
+  labs(title=&quot;Air Malta 2019 vs. 2020 Capacity&quot;, 
+       subtitle=&quot;ASK in Billions between 21st March to 21st September&quot;) + 
+  coord_flip()+
+  theme_bw()+
+  ylab(&quot;Available Seat Kilometres (Billions)&quot;)+
+  xlab(&quot;Year&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p>Over the same time period, Air Malta flew only operated a fourth of the capacity it operated in the year before.</p>
+</div>
+<div id="sector-length" class="section level3">
+<h3>Sector Length</h3>
+<p>As an aside, it is now relatively easy to plot a histogram of the calculated distances. The dashed line is at the 1,300-kilometre mark, which starts to approach the delineation between short haul flights and medium haul flights.</p>
+<pre class="r"><code>kpiASK %&gt;% 
+  filter(estDepartureAirport != estArrivalAirport) %&gt;% 
+  ggplot(aes(dist))+
+  geom_histogram(bins=40, fill = &quot;cyan4&quot;)+
+  geom_vline(xintercept = 1300, lty = 2)+
+  labs(title = &quot;Distribution of Sector Lengths&quot;)+
+  ylab(&quot;Flights&quot;)+
+  xlab(&quot;Distance (KM)&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p>The cluster on the left are flights to Catania, Palermo and Tunis (it’s actually intriguing to me that one of Air Malta’s shortest segments is an intercontinental flight) and the small Tetris cube near the 3,000 kilometre mark are flights to Moscow and St. Petersburg.</p>
+<p>Although I’ve rarely thought about it as a medium haul airline, that’s what the bulk of Air Malta’s operations end up being, deep into London, Paris and Brussels.</p>
+</div>
+<div id="capacity-by-city" class="section level3">
+<h3>Capacity by City</h3>
+<p>We can also split that capacity by city to see which cities are important to Air Malta. For this section I’ve focused on one-way capacity leaving Malta (in reality this is half, a near perfect mirror image exists of capacity from those destinations to Malta).</p>
+<p>Situations like these are when network graphs really excel: here the originating node is Malta in the centre, and the terminating nodes are dispersed on the edges, with the thickness of the lines being proportional to capacity in seats.</p>
+<pre class="r"><code>library(igraph)
+library(ggraph)
+
+cities &lt;- flights %&gt;% 
+  filter(estDepartureAirport == &quot;LMML&quot;,
+         !is.na(ArrCity),
+         estArrivalAirport != &quot;LMML&quot;) %&gt;% 
+  group_by(year, ArrCity, DepCity) %&gt;% 
+  summarise(flights = n(),
+            total_seats = sum(Seats)) %&gt;% 
+  filter(flights &gt; 10)
+
+set.seed(320)
+cities %&gt;%
+  filter(year == 2019,
+         total_seats &gt; 12000) %&gt;% 
+  ungroup %&gt;% 
+  select(ArrCity, DepCity, total_seats) %&gt;% 
+  graph_from_data_frame() %&gt;%
+  ggraph(layout = &quot;stress&quot;) +
+  geom_edge_arc(aes(edge_width = total_seats), 
+                    color = &quot;#ee4433&quot;, alpha = .7)+
+  geom_node_point(size = 4, 
+                  color = &quot;grey40&quot;) +
+  geom_node_text(aes(label = name),
+                 check_overlap = T, 
+                 repel = T, 
+                 size = 4, 
+                 color = &quot;black&quot;) +
+  theme_void()+
+  theme(plot.background = element_rect(fill = &quot;white&quot;),
+        plot.title = element_text(size = 12, 
+                                  color = &quot;black&quot;, 
+                                  face = &quot;bold&quot;)) +
+  labs(title = &quot;  Top 14 Air Malta Destinations in 2019&quot;,
+       subtitle = &quot;   by one way seat capacity&quot;,
+       edge_width = &quot;Total Seats&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p>London remains the crown jewel of the Air Malta network, with an excess of 100,000 seats over 6 months, nearly double Paris and Rome, which come in second and third. Air Malta has also cemented this importance in it’s symbology, assigning the Heathrow service the first in it’s range of flight numbers – 100 – a tradition that denotes a flagship route.</p>
+<p>To plot the change in seats from 2019 to 2020 was a little more involved, partly because I had my heart set on displaying it using <a href="https://github.com/hrbrmstr/ggalt">Bob Rudis’s fantastic dumbbell chart addon to ggplot.</a> To do this I had to make a wide data frame, where 2019 seats were one column and 2020 seats were another.</p>
+<pre class="r"><code>nintheen &lt;-  flights %&gt;% 
+  filter(estDepartureAirport == &quot;LMML&quot;,
+         !is.na(ArrCity),
+         estArrivalAirport != &quot;LMML&quot;) %&gt;% 
+  group_by(year, ArrCity, DepCity) %&gt;% 
+  summarise(flights = n(),
+            total_seats_2019 = sum(Seats)) %&gt;% 
+  filter(year == 2019) %&gt;% 
+  ungroup() %&gt;% 
+  select(ArrCity, total_seats_2019)
+
+twenty &lt;-  flights %&gt;% 
+  filter(estDepartureAirport == &quot;LMML&quot;,
+         !is.na(ArrCity),
+         estArrivalAirport != &quot;LMML&quot;) %&gt;% 
+  group_by(year, ArrCity, DepCity) %&gt;% 
+  summarise(flights = n(),
+            total_seats_2020 = sum(Seats)) %&gt;% 
+  filter(year == 2020) %&gt;% 
+  ungroup() %&gt;% 
+  select(ArrCity, total_seats_2020)
+
+KPIDelta &lt;- nintheen %&gt;% 
+  left_join(twenty, by = &quot;ArrCity&quot;) %&gt;% 
+  na.omit() %&gt;% 
+  top_n(16, total_seats_2019)
+
+library(ggalt)
+library(ggtext)
+
+ggplot(KPIDelta, aes(x=total_seats_2019, xend=total_seats_2020, y=fct_reorder(ArrCity, total_seats_2019), group=ArrCity)) + 
+        geom_dumbbell(color=&quot;black&quot;, 
+                        size=1, colour_x = &quot;black&quot;, colour_xend = &quot;red&quot;) + 
+
+        labs(y=&quot;City&quot;, 
+             x=&quot;Total Seats&quot;, 
+             title=&quot;Change in Air Malta Seating Capacity by Destination&quot;, 
+             subtitle=&quot;&lt;span style = &#39;color:black;&#39;&gt;2019&lt;/span&gt; vs. &lt;span style = &#39;color:red;&#39;&gt;2020&lt;/span&gt; **Period from 21st March to 21st September**&quot;) +
+  scale_x_continuous(labels = comma)+
+        theme(panel.background=element_rect(fill=&quot;white&quot;),
+              panel.grid.minor=element_blank(),
+              panel.grid.major.y=element_blank(),
+              panel.grid.major.x=element_line(),
+              axis.ticks=element_blank(),
+              legend.position=&quot;top&quot;,
+              panel.border=element_blank(),
+              plot.subtitle = element_textbox_simple(
+    ))</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>While the reductions are massive, they do seem to be constant across the board (that is, most of the cities maintain the same order relative to each other). The one real exception seems to be Frankfurt, which only was slightly impacted, remaining the second most served airport in 2020.</p>
+<p>I believe this has to do with how Air Malta operated a “lifeline” schedule early in the pandemic, rerouting Maltese nationals and residents from around the world to either London, Frankfurt or Amsterdam.</p>
+<p>Another thing to consider is that operations to London and Paris involve two airports: Gatwick and Orly are marketed as closer, less congested alternatives if you just intend to visit the cities, while Heathrow and de Gaulle provide more international connection opportunities.</p>
+<p>Heathrow and Gatwick are also slot restricted airports (in practice so are the Parisian ones, but they are both significantly larger than their London counterparts and so laxer). What this means is, carriers must bid for and secure their rights to operate flights. Indeed, these slots, acquired by Air Malta nearly half a century ago when competition was less fierce, remained some of its most valuable assets at an estimated 58 million euros, <a href="https://timesofmalta.com/articles/view/air-malta-received-58m-for-its-airport-slots.673780">before being spun off to MaltaMedAir in 2018.</a></p>
+<p>The kicker with slots is that they often come with capacity clauses that dictate that you for instance fly at least half the schedule or lose them. In March, when capacity collapsed, this meant that the prospect of airlines flying empty ghost flights to hang on to their slots was a possibility, until most airports announced that they would not be enforcing them for the time being.</p>
+<p>Interestingly, although free from these limitations, Air Malta responded differently. In Paris they scaled back operations equally at both airports, while in London Gatwick was immediately dropped, with all remaining capacity going to Heathrow.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+</div>
+</div>
+</div>
