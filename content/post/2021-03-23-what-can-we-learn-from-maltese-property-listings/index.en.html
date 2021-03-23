@@ -1,0 +1,296 @@
+---
+title: "What Can We Learn From Maltese Property Listings?"
+author: ''
+date: '2019-03-21'
+slug: what-can-we-learn-from-maltese-property-listings
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>I suppose a defining feature of being in your mid twenties is that you find progressively more of your small talk having to do with properties: how big they should be, which floor negates the value added by a lift, and even, when alternate conversation seems especially hard to conjure, the benefits of using one type of grout as opposed to another.</p>
+<p>Often during such conversations, I found myself wondering how much value can be extracted by an in-depth analysis. So when I came across a local property website that seemed relatively straightforward to scrape, I decided to make a weekend project of it!</p>
+</div>
+<div id="the-dataset" class="section level2">
+<h2>The Dataset</h2>
+<p>I’d estimate that around half my time on this was spent trying to extract meaningful variables, but in the end, I managed to end up with just shy of 1,500 listed properties. The two main continuous variables in this dataset are the price of the property listing in Euros, and the size in square meters. The number of bedrooms and bathrooms was also harvested, together with a whole set of categorical variables including Town, Region, the floor where applicable, and whether a property was listed as having a Garage/Views/Pool/Lift/Garden/Airconditioning/an Outside Area/if it’s Furnished.</p>
+<p>Now, I’d advise against using this data to make inferences about current property prices, since this is what people are <em>asking</em> for their property. This particular website might not even be representative of the market, because for example it might be more popular in one region of the island as opposed to another.</p>
+<pre class="r"><code>str(PropertyListingsCleaned)</code></pre>
+<pre><code>## spec_tbl_df [1,394 x 19] (S3: spec_tbl_df/tbl_df/tbl/data.frame)
+##  $ Listing Name   : chr [1:1394] &quot;Malta property: Townhouse in Zabbar for sale&quot; &quot;Property Malta: Spacious 3 Bedroom Apartment in Balzan&quot; &quot;Gozo Real Estate: 5 Bedroom House in Gharb for sale&quot; &quot;Property for sale in Malta: Furnished 2 Bedroom Apartment in St. Julians&quot; ...
+##  $ PropertyID     : chr [1:1394] &quot;Prop4&quot; &quot;Prop5&quot; &quot;Prop6&quot; &quot;Prop7&quot; ...
+##  $ Bedrooms       : chr [1:1394] &quot;2&quot; &quot;3&quot; &quot;5&quot; &quot;2&quot; ...
+##  $ Bathrooms      : chr [1:1394] &quot;2&quot; &quot;2&quot; &quot;6&quot; &quot;2&quot; ...
+##  $ Furnished      : chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;No&quot; &quot;Yes&quot; ...
+##  $ Views          : chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;Yes&quot; &quot;Yes&quot; ...
+##  $ Garage         : chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;No&quot; &quot;No&quot; ...
+##  $ Pool           : chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;Yes&quot; &quot;No&quot; ...
+##  $ Outside        : chr [1:1394] &quot;Yes&quot; &quot;Yes&quot; &quot;Yes&quot; &quot;Yes&quot; ...
+##  $ Floor          : chr [1:1394] NA &quot;1st&quot; NA &quot;4th&quot; ...
+##  $ Lifts          : chr [1:1394] &quot;No&quot; &quot;Yes&quot; &quot;No&quot; &quot;Yes&quot; ...
+##  $ Airconditioning: chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;No&quot; &quot;No&quot; ...
+##  $ Garden         : chr [1:1394] &quot;No&quot; &quot;No&quot; &quot;Yes&quot; &quot;No&quot; ...
+##  $ TextDescription: chr [1:1394] &quot;Location: Zabbar Malta property for sale is this Townhouse in Zabbar for sale. Although the property needs some&quot;| __truncated__ &quot;Location: Balzan Property in Malta for sale is this spacious 3 bedroom apartment located in Balzan in a small b&quot;| __truncated__ &quot;Location: Gozo - Gharb Agents from our Gozo Real Estate agency are presenting this beautiful shell form house i&quot;| __truncated__ &quot;Location: St. Julians Furnished 2 Bedroom Apartment in St. Julians with sea vies is brought toy ou from our lis&quot;| __truncated__ ...
+##  $ PriceEuros     : num [1:1394] 160000 308000 424000 630000 365000 365000 425000 175000 285000 275000 ...
+##  $ AreaMSquared   : num [1:1394] 108 147 600 100 109 137 110 90 120 120 ...
+##  $ Town           : chr [1:1394] &quot;Zabbar&quot; &quot;Balzan&quot; &quot;Gharb&quot; &quot;St. Julians&quot; ...
+##  $ Region         : chr [1:1394] &quot;Southern Harbour&quot; &quot;Western&quot; &quot;Gozo&quot; &quot;Northern Harbour&quot; ...
+##  $ PropertyType   : chr [1:1394] &quot;Townhouse&quot; &quot;Apartment&quot; &quot;House&quot; &quot;Apartment&quot; ...
+##  - attr(*, &quot;spec&quot;)=
+##   .. cols(
+##   ..   `Listing Name` = col_character(),
+##   ..   PropertyID = col_character(),
+##   ..   Bedrooms = col_character(),
+##   ..   Bathrooms = col_character(),
+##   ..   Furnished = col_character(),
+##   ..   Views = col_character(),
+##   ..   Garage = col_character(),
+##   ..   Pool = col_character(),
+##   ..   Outside = col_character(),
+##   ..   Floor = col_character(),
+##   ..   Lifts = col_character(),
+##   ..   Airconditioning = col_character(),
+##   ..   Garden = col_character(),
+##   ..   TextDescription = col_character(),
+##   ..   PriceEuros = col_double(),
+##   ..   AreaMSquared = col_double(),
+##   ..   Town = col_character(),
+##   ..   Region = col_character(),
+##   ..   PropertyType = col_character()
+##   .. )</code></pre>
+</div>
+<div id="exploring-the-data" class="section level2">
+<h2>Exploring the data</h2>
+<p>It turns out that the median listed price of a property on this particular website is 280,000 Euros, and the median area is 131 square meters. Here’s how price is distributed, split by property type:</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>You can see that most apartments and maisonettes have an asking price of around 250,000 Euros, while duplexes, farmhouses and houses tend to be more variable. And a villa might cost you anywhere from 250,000 Euros to 2.5 Million.</p>
+</div>
+<div id="how-does-cost-vary-with-area" class="section level2">
+<h2>How does Cost vary with Area?</h2>
+<p>When you initially plot cost and area, the graph looks wholly uninformative, since prices and areas tend to have a few large values that hinder us from seeing any meaningful pattern.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>To fix this, we’ll use a log 10 transformation that just rescales the data.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>And there you have it! intuitevly, the price of a property has a linear relationship with it’s area!</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>Since this is a log10 transformation, to get the area in meters squared back, just multiply 10 by the power of that number. So, for instance, eyeballing the above, our apartments have a median area of 2.1. 10^2.1 is 125, which makes sense.</p>
+<p>##More exploration:
+<img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-1.png" width="672" /><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-2.png" width="672" /></p>
+</div>
+<div id="whats-the-cost-of-a-metre-square" class="section level2">
+<h2>What’s the cost of a metre square?</h2>
+<p>This is an interesting one. What’s the actual cost of a metre square by property type?</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>##Are there differences based on locality?</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>It looks like pools are more common in rural regions like Gozo and the South East, and become less common as we move into the much more heavily urbanised North and South Harbour regions.</p>
+</div>
+<div id="pondering-the-nice-things" class="section level2">
+<h2>Pondering the nice things</h2>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p>Seems pretty intuitive so far. Having a pool or a view and being higher up all lead to higher prices. That being said, it’s not ideal to look at these variables in isolation like this, since for instance having a pool might also be associated with a higher prevalence of having a view or having a larger property area. To which will you then attribute the increase in property price?</p>
+<p>The correct way would be to deploy a linear model!</p>
+<p>##Linear Modeling Time!</p>
+<p>First, let’s fit a linear model to the relationship between price and area of a property.</p>
+<pre class="r"><code>CompleteCases &lt;- PropertyData[complete.cases(PropertyData), ]
+SimpleLM &lt;- lm(PriceEuros ~ AreaMSquared, data = CompleteCases)
+summary(SimpleLM)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = PriceEuros ~ AreaMSquared, data = CompleteCases)
+## 
+## Residuals:
+##      Min       1Q   Median       3Q      Max 
+## -1329012  -104891   -51301    37925   894860 
+## 
+## Coefficients:
+##               Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  212789.62   10450.99   20.36   &lt;2e-16 ***
+## AreaMSquared    769.59      60.61   12.70   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 187500 on 959 degrees of freedom
+## Multiple R-squared:  0.1439, Adjusted R-squared:  0.143 
+## F-statistic: 161.2 on 1 and 959 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p>Our bare bones linear model tells us that the average price of a listed property is 212,789 euros, and goes up by 769 euros each additional square metre we add. However the R-squared value, which tells us how well our model fits the data is dreadful, showing we manage to explain only around 14% of the variance in the data.</p>
+<p>What happens if we throw in every single variable we have?</p>
+<pre class="r"><code>ComplexLM &lt;- lm(PriceEuros ~ ., data = CompleteCases)
+summary(ComplexLM)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = PriceEuros ~ ., data = CompleteCases)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -878308  -81683  -19755   57216  868419 
+## 
+## Coefficients:
+##                          Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)            -146604.33   32379.79  -4.528 6.74e-06 ***
+## Bedrooms                 70314.67    7874.32   8.930  &lt; 2e-16 ***
+## FurnishedYes             56521.62   14996.56   3.769 0.000174 ***
+## ViewsYes                107325.53   12411.47   8.647  &lt; 2e-16 ***
+## GarageYes&lt;U+00A0&gt;        60619.90   18031.16   3.362 0.000805 ***
+## PoolYes                  80551.43   24619.57   3.272 0.001108 ** 
+## OutsideYes               -6267.82   16687.28  -0.376 0.707296    
+## Floor2nd                  2050.15   18653.18   0.110 0.912505    
+## Floor3rd                  7798.87   18628.55   0.419 0.675567    
+## Floor4th                  1057.65   19885.07   0.053 0.957594    
+## Floor5th                 36664.60   25285.27   1.450 0.147384    
+## Floor5th+               114338.63   21881.82   5.225 2.15e-07 ***
+## FloorGround              -4371.11   20395.97  -0.214 0.830350    
+## LiftsYes                 18291.82   17962.25   1.018 0.308777    
+## GardenYes                 -473.76   45164.39  -0.010 0.991633    
+## AreaMSquared               312.86      65.46   4.779 2.04e-06 ***
+## RegionNorthern          160001.74   15083.39  10.608  &lt; 2e-16 ***
+## RegionNorthern Harbour  217959.53   14495.74  15.036  &lt; 2e-16 ***
+## RegionSouth Eastern      79074.55   22542.78   3.508 0.000473 ***
+## RegionSouthern Harbour  129294.90   23123.59   5.591 2.96e-08 ***
+## RegionWestern           175645.85   21773.26   8.067 2.20e-15 ***
+## PropertyTypeDuplex       41084.88   30743.88   1.336 0.181758    
+## PropertyTypeFarmhouse   263123.62   90679.83   2.902 0.003799 ** 
+## PropertyTypeHouse       165116.48   40890.20   4.038 5.83e-05 ***
+## PropertyTypeMaisonette   28404.07   21819.88   1.302 0.193323    
+## PropertyTypePenthouse     5339.11   16021.79   0.333 0.739028    
+## PropertyTypeTownhouse   142456.80   60452.77   2.356 0.018654 *  
+## PropertyTypeVilla        90696.54   98381.15   0.922 0.356825    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 147800 on 933 degrees of freedom
+## Multiple R-squared:  0.4829, Adjusted R-squared:  0.468 
+## F-statistic: 32.27 on 27 and 933 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p>We’re now managing to explain 46% of the variance present in the dataset, as well as being able to assess the relative importance of the features.</p>
+<p>For instance, if a property is furnished, the addition to the value is around 56,500 euros. If this seems high, it might be because other factors are at play. For instance, a large number of properties listed as unfurnished might be in shell status, requiring further work, resulting in them being listed at a lower price.</p>
+<p>Floor was an interesting one: the only statistically significant effect was when a property was higher than the 5th floor. For the priviledge of looking down on 4 floors, you’ll fork out an extra 114,338 euros.</p>
+<p>Price also goes up by 70,000 Euros for each additional bedroom(this is probably measuring the same thing as area, since these two measures are probably highly correlated), and the steepest premiums are paid to live in the Northen Harbour (~217k Euros) and Western (~175k Euros) regions respectively.</p>
+<p>I think we can do better.</p>
+</div>
+<div id="onwards-to-decision-trees" class="section level2">
+<h2>Onwards to Decision Trees!</h2>
+<p>In my experience it’s pretty hard explaining the above to a general audience, and the linear model framework was not fitting overly well. So let’s try another framework that might be better at this, with the added bonus that it’s easier to understand.</p>
+<p>Decision trees split the data into sub populations using the variables it thinks generate the best splits. To test the quality of the decision tree we’ll be building, I’ve split the data randomly. We’ll use 80% of it to train our model, and 20% of it to assess it’s performance on new “unseen” data.</p>
+<pre class="r"><code>##Generate Train/Test Split
+set.seed(2019)  
+sample &lt;- sample.int(n = nrow(CompleteCases), size = floor(.8*nrow(CompleteCases)), replace = F)
+
+train &lt;- CompleteCases[sample, ]
+test  &lt;- CompleteCases[-sample, ]</code></pre>
+<p>The benefits of decision trees are twofold: they might pick up on complex non-linear relationships that linear modeling can’t, and they produce wonderful intuitive graphs like this one:</p>
+<pre class="r"><code>library(rpart)
+library(rpart.plot)
+
+tree &lt;- rpart(PriceEuros ~ ., data = train, cp = 0.02)
+
+rpart.plot(tree, box.palette=&quot;RdBu&quot;,)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-17-1.png" width="672" /></p>
+<p>What our decision tree is telling us, starting from the top, is that it thinks that the average price of a property is 322,000 Euros. Then comes the first split: the model has determined that the best variable to split on is area. If the area is less than 213 metres squared, we go left. 93% of the listed properties fall under this bracket.</p>
+<p>It’s also decided to split one more time using area. If our property’s area is less than 129 metres squared, we go left once again. Region now becomes important. If we’re in Gozo, we go left again. 12% of our properties meet this criteria, and their price is around 164,000 Euros. For the 41% of properties with an area less than 129 metres squared that are not in Gozo, their price is around 265,000 euros. This tells us that property in Gozo is cheaper.</p>
+<p>Let’s go back up to area is less than 129 metres squared and go right this time. Here we’re saying no, so our property is larger than 129 metres squared, but smaller than the 213 of the split above it. Let’s pretend our region isn’t Gozo, South Eastern or Southern Harbour, so right once again. Now whether our property has a view becomes a factor. This is where it might get a bit counterintuitive. If Views = No is yes, that is, the property does not have a view, its listed price is around 344,000 Euros. If a property has a view, it’s listed price jumps up to 516,000 Euros - these are probably your Portomaso apartments and Siggiewi villa’s.</p>
+<p>So how good is our single humble tree at predicting?</p>
+<pre class="r"><code>TreePreds &lt;- predict(tree, test)
+
+library(Metrics)# Has a handy inbuilt RMSE function!
+rmse(TreePreds, test$PriceEuros)</code></pre>
+<pre><code>## [1] 179939.9</code></pre>
+<p>Not overly good: on average it’s off by 146,000 euros.</p>
+<p>Just to give you an idea of what that looks like in real life, here are the first 5 predictions of the model using the test data that it’s never seen before, compared with the actual price these properties were listed at:</p>
+<pre class="r"><code>data.frame(&quot;PredictedPrice&quot; = TreePreds, &quot;ActualListedPrice&quot; = test$PriceEuros) %&gt;%
+  head()</code></pre>
+<pre><code>##   PredictedPrice ActualListedPrice
+## 1       283533.2            308000
+## 2       283533.2            285000
+## 3       500771.6            295000
+## 4       283533.2            260000
+## 5       283533.2            200000
+## 6       283533.2            274000</code></pre>
+<p>It’s pretty close on the 1st, 2nd and 6th occasion, but way off on the 3rd, 4th and 5th. Part of the reason might be that these are listed requested prices, and some sellers are more optimistic than others. Take the 2nd and 3rd case for instance. The model predicted the same value, which probably means it saw similar regional/area/view etc. splits in both cases.</p>
+<p>We can easily confirm this if we look at the 2nd and 3rd rows of our testing data:</p>
+<pre class="r"><code>test[2:3,]</code></pre>
+<pre><code>## # A tibble: 2 x 13
+##   Bedrooms Furnished Views Garage Pool  Outside Floor Lifts Garden PriceEuros
+##      &lt;dbl&gt; &lt;fct&gt;     &lt;fct&gt; &lt;chr&gt;  &lt;fct&gt; &lt;fct&gt;   &lt;chr&gt; &lt;fct&gt; &lt;fct&gt;       &lt;dbl&gt;
+## 1        3 Yes       No    No     No    Yes     2nd   No    No         285000
+## 2        1 No        Yes   No     No    Yes     4th   Yes   No         295000
+## # ... with 3 more variables: AreaMSquared &lt;dbl&gt;, Region &lt;fct&gt;,
+## #   PropertyType &lt;fct&gt;</code></pre>
+<p>And indeed, the only difference is in bedrooms and region, but the listed price varies dramatically. Let’s beef up our approach: instead of one tree, we’ll grow many, and average their outputs. To do this we’ll use the Caret package.</p>
+<pre class="r"><code>library(caret)</code></pre>
+<pre><code>## Loading required package: lattice</code></pre>
+<pre><code>## 
+## Attaching package: &#39;caret&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:Metrics&#39;:
+## 
+##     precision, recall</code></pre>
+<pre><code>## The following object is masked from &#39;package:purrr&#39;:
+## 
+##     lift</code></pre>
+<pre class="r"><code>myControl &lt;- trainControl(method = &quot;cv&quot;, number = 5, verboseIter = TRUE)
+model_rf &lt;- train(PriceEuros ~ ., 
+              data = train,
+              tuneLength = 1,
+              method = &quot;rf&quot;,
+              trControl = myControl,
+              importance = T)</code></pre>
+<pre><code>## + Fold1: mtry=5 
+## - Fold1: mtry=5 
+## + Fold2: mtry=5 
+## - Fold2: mtry=5 
+## + Fold3: mtry=5 
+## - Fold3: mtry=5 
+## + Fold4: mtry=5 
+## - Fold4: mtry=5 
+## + Fold5: mtry=5 
+## - Fold5: mtry=5 
+## Aggregating results
+## Fitting final model on full training set</code></pre>
+<pre class="r"><code>plot(model_rf$finalModel)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+<p>The above is the random forest in action, reducing the error as it fits progressively more decision trees. There are marginal accuracy returns beyond 50 trees, and by 100 the plateau tells us that each additional tree is not worth the computation time.</p>
+<p>So, did this procedure increase accuracy? Let’s find out!</p>
+<pre class="r"><code>rfpred &lt;- predict(model_rf, test)
+rmse(rfpred, test$PriceEuros)</code></pre>
+<pre><code>## [1] 155831</code></pre>
+<pre class="r"><code>data.frame(&quot;PredictedPrice&quot; = rfpred, &quot;ActualListedPrice&quot; = test$PriceEuros) %&gt;%
+  head()</code></pre>
+<pre><code>##   PredictedPrice ActualListedPrice
+## 1       275093.7            308000
+## 2       251821.0            285000
+## 3       341402.5            295000
+## 4       227519.7            260000
+## 5       208858.2            200000
+## 6       236022.4            274000</code></pre>
+<p>Yes! We’ve reduced our error to 128,000 euros! At this point, if the end aim of this excersise was to train a model to predict the price of a listing based on attributes, we’d probably go back to the data and try to scale and create more meaningful variables.</p>
+<p>But it’s not, and since this post is getting long as it is, I’ll show you one last advantage of random forests: we can also use them to see which features it thinks are important! Which was sort of the point of all of this!</p>
+<pre class="r"><code>varImp(model_rf)$importance %&gt;% 
+  as.data.frame() %&gt;%
+  rownames_to_column() %&gt;%
+  arrange(Overall) %&gt;%
+  mutate(Feature = forcats::fct_inorder(rowname)) %&gt;%
+  ggplot(aes(x=Feature, y=Overall)) + 
+  geom_point(col=&quot;tomato2&quot;, size=3) + 
+  geom_segment(aes(x=Feature, 
+                   xend=Feature, 
+                   y=min(Overall), 
+                   yend=max(Overall)), 
+               linetype=&quot;dashed&quot;, 
+               size=0.1) +  
+  labs(title=&quot;Overall Importance of Feature&quot;,
+       subtitle = &quot;As Assessed by Random Forest&quot;)+
+       ylab(&quot;Importance&quot;) +  
+  coord_flip()+
+  theme_classic()</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-23-1.png" width="672" /></p>
+<p>Perhaps the best way to think about the above would be as a ranking of which features generate the cleanest, most pure splits. These might not necessarily be the ones that add most value to a property, but they help us distinguish between a less expensive and a more expensive listing.</p>
+</div>

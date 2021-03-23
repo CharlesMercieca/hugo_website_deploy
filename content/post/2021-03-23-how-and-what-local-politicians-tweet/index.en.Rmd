@@ -1,0 +1,369 @@
+---
+title: "How And What Local Politicians Tweet"
+author: "Charles Mercieca"
+date: '2018-11-13'
+slug: how-and-what-local-politicians-tweet
+categories: []
+tags: []
+subtitle: ''
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rtweet)
+library(tidyverse)
+library(lubridate)
+library(tidytext)
+library(scales)
+library(gridExtra)
+
+load("~/R Projects/Twitter Analysis/manytimelines.Rda")
+
+histUnfiltered <- ggplot(Timelines2, aes(x=ymd_hms(created_at), fill = screen_name))+
+  geom_histogram(position = "identity", bins = 100, show.legend = F)+
+  facet_wrap(~screen_name, ncol = 3)+
+  labs(title = "# All Tweets over Time (Including RT's)")+ 
+  ylab("Count of Tweets")+
+  xlab("Date")
+```
+
+# Introduction: Political Tweets
+
+Politics has always been concerned with using any available method of mass media to disseminate its message, and social media is no exception. In Malta, [the most popular social media sites, by share of their usage are, according to a May 2018 Misco survey:](http://www.independent.com.mt/articles/2018-05-24/business-news/Social-media-usage-trends-in-Malta-in-2018-6736190407)
+
+* Facebook (87% of the population)
+* Google+ (50%)
+* YouTube (46%)
+* Instagram (24%)
+* Twitter (12%)
+
+I've yet to come across anyone who actually uses Google+ regularly, so those answers are probably people who just have an account. And since YouTube and Instagram aren't discussion oriented, you can make the case that most political discourse is on either Facebook or Twitter. Since by default most of what is said on Twitter is public, and Twitter has an API which is a dream to use in comparison to Facebook's, this blog post will look solely at public Twitter data, obtained by querying the Twitter API, [for which I used this fantastic tutorial.](https://towardsdatascience.com/access-data-from-twitter-api-using-r-and-or-python-b8ac342d3efe)
+
+![](https://scontent.fmla3-1.fna.fbcdn.net/v/t1.0-9/46153860_10213207674735553_3792335794564235264_n.jpg?_nc_cat=102&_nc_ht=scontent.fmla3-1.fna&oh=657ac1f63cbf301a17c614420678b63b&oe=5C67E043)
+
+## The Politicians
+9 public profiles were examined:
+
+* Joseph Muscat, Prime Minister
+* Adrian Delia, Leader of the Opposition
+* Marie Louise Coleiro Preca, President
+* Simon Busutti, former Leader of the Opposition
+* Jason Azzopardi, MP and relatively vocal on Twitter
+* Chris Fearne, Deputy Prime Minister
+* Konrad Mizzi, Minister for Tourism
+* Kurt Farrugia, Prime Minister's Head of Communications
+* Clyde Puli, Opposition MP
+
+## The Data
+Using the Twitter API, one can request up to 3,200 tweets from any public user's timeline. There's a slight hitch though; retweets are included in that 3,200 count. This means that for prolific retweeters, we can only go back a few months, since that 3,200 quota is immediately filled. 
+
+Here's a histogram showing *all* tweets over time, including retweets.
+```{r Plot unfiltered histogram, message=FALSE, warning=FALSE, echo = FALSE}
+histUnfiltered
+```
+
+Two users that immediately stand out through the sheer number of their tweets are Joseph Muscat and Jason Azzopardi. In both these cases, the 3,200 limit means we only get data from around May onward for both these users. 
+
+The President, Simon Busuttil, Kurt Farrugia, Chris Fearne and Clyde Puli all have a base level of Twitter usage. Konrad Mizzi, and more surprisingly, Adrian Delia, seem to not use Twitter much. Clyde Puli also seems to be tweeting less in the last year or so compared to before.
+
+From this point on, we'll use a filtered version of the dataset that excludes retweets and only looks at what the politicians themselves (or their staff) are writing. Here's what that histogram looks like:
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+OriginalTweets <- Timelines2 %>%
+  filter(is_retweet == FALSE)
+
+histFiltered <- ggplot(OriginalTweets, aes(x=ymd_hms(created_at), fill = screen_name))+
+  geom_histogram(position = "identity", bins = 100, show.legend = F)+
+  facet_wrap(~screen_name, ncol = 3)+
+  labs(title = "# Tweets over Time (Excluding RT's)")+ 
+  ylab("Count of Tweets")+
+  xlab("Date")
+
+histFiltered
+```
+
+# Who has the largest number of followers?
+
+```{r Followers, message=FALSE, warning=FALSE, echo=FALSE}
+
+ NumofFollowers <- OriginalTweets %>% 
+   group_by(screen_name)%>%
+   summarise(followers = mean(followers_count))%>%
+   ggplot(aes(fct_reorder(screen_name, followers), followers, fill = screen_name))+
+   geom_bar(stat="identity")+
+   coord_flip()+
+   labs(title = "Number of Followers")+
+   xlab("User")+
+   ylab("Followers")+
+   scale_y_continuous(labels = comma)+
+   theme(legend.position="none")
+NumofFollowers
+```
+
+# Whose Tweets are the longest?
+What's the average word count of our users's tweets?
+```{r Word Counts, message=FALSE, warning=FALSE, echo=FALSE}
+library(ngram)
+OriginalTweets$wordcount = lapply(OriginalTweets$text, wordcount)
+  OriginalTweets$wordcount <-as.numeric(OriginalTweets$wordcount)
+  word_count<-OriginalTweets %>% group_by(screen_name) %>% summarise(Average_Word_Count = mean(wordcount))
+  
+  word_count%>%
+    mutate(Average_Word_Count = round(Average_Word_Count, 1))%>%
+             arrange(desc(Average_Word_Count))
+```
+
+Most users manage an average of around 20 words per tweet. The average Jason Azzopardi or Joseph Muscat tweet is a bit longer, the average Clyde Puli or Chris Fearne tweet a bit shorter.
+
+Here's what that distribution would look like as boxplots, with the thick middle line denoting the median, the coloured bars to either side of it showing the middle 50% of the data. The spread of the data shows that Joseph Muscat, Jason Azzopardi, and Adrian Delia's word count in tweets is highly variable. For the other users, except the odd outlier (represented by the dots), not so much.
+
+```{r Boxplots, message=FALSE, warning=FALSE, echo = FALSE}
+ggplot(OriginalTweets, aes(x = factor(screen_name), y=wordcount, fill = factor(screen_name)))+
+    geom_boxplot()+
+  coord_flip()+ 
+  theme(legend.position="none")
+```
+
+# Favourites and Retweets
+So far we know that Joseph Muscat and Jason Azzopardi are the most prolific twitter users when looking at volume. But how well do they engage their respective audiences? 
+
+One measure of how widely the message is disseminated is how much times a tweet has been favourited or retweeted.
+
+Again, Joseph Muscat is the most succesful user in terms of getting his message across, with his tweets being favourited 97 times and retweeted 40 times on average. This is nearly double of what the runner up, and his direct competitor, Adrian Delia manages. 
+
+Other Twitter users who seem to succesfully get their message across include Chris Fearne, Konrad Mizzi, Kurt Farrugia and Simon Busuttil. The violin graphs below show the density of the distribution. Taking Simon Busuttil's retweets as an example, we can see that the majority of his tweets has less than 100 retweets. A large portion of that had even less than 50, but one or two tweets had over 450 retweets.
+
+```{r Violin Plots, message=FALSE, warning=FALSE, echo=FALSE}
+faveRTmat<-OriginalTweets%>%group_by(screen_name)%>%summarise(avg_faves = mean(favorite_count), avg_rts = mean(retweet_count))
+
+faveRTmat
+
+ ggplot(OriginalTweets, aes(factor(screen_name), y = retweet_count, fill= screen_name))+
+   geom_violin()+
+   facet_wrap(~screen_name, scales = "free")+
+  labs(title = "Retweets Distribution")+
+  ylab("# of Retweets")+ 
+   xlab("")+
+  theme(legend.position="none")
+ 
+ 
+ ggplot(OriginalTweets, aes(factor(screen_name), y = favorite_count, fill= screen_name))+
+   geom_violin()+
+   facet_wrap(~screen_name, scales = "free")+
+  labs(title = "Favourites Distribution")+
+  ylab("# of Favourites")+ 
+   xlab("")+
+  theme(legend.position="none")
+```
+
+As a side note, while creating these graphs, I realised that they looked more or less the same. And indeed, when you plot out the relationship between the number of retweets and favourites for each tweet, it's linear. This makes sense, as to an extent, these two things are measuring the same phenomenon: popularity of the tweet.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(OriginalTweets, aes(retweet_count, favorite_count))+ 
+  geom_point(aes(col = screen_name))+
+  geom_smooth(method = "lm", se= F, col = "black")+
+  labs(title = "Relationship between a Tweet's RT's and Favourites")+
+  xlab("Retweet Count")+
+  ylab("Favourite Count")
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+tidy_tweets <-OriginalTweets %>% 
+  filter(is_retweet == "FALSE")%>% #Filter out retweets
+  unnest_tokens(word, text, token = "tweets")%>%
+  filter(!word %in% stop_words$word,
+         !word %in% str_remove_all(stop_words$word, "'"),
+         str_detect(word, "[a-z]"))
+
+frequency_raw <- tidy_tweets %>% 
+  group_by(screen_name) %>% 
+  count(word, sort = TRUE) %>% 
+  left_join(tidy_tweets %>% 
+              group_by(screen_name) %>% 
+              summarise(total = n())) %>%
+  mutate(freq = n/total)
+
+frequency <- frequency_raw %>%
+  select(screen_name, word, freq) %>% 
+  spread(screen_name, freq)
+
+JaseKurt <- ggplot(frequency, aes(AzzopardiJason, KurtFarrugia)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.25, height = 0.25) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "red")
+
+
+```
+# Word Frequencies 
+
+So what are individual users more likely to tweet? Again, by using the *tidytext* package, which features a twitter tokenizer, we can find out. [I've been fascinated by the simple elegance of plotting frequency on scatter plots from the moment I saw them in Julia Silge and David Robinson's book, so this will be a shameless copy.](https://www.tidytextmining.com/twitter.html#word-frequencies-1)
+
+The principle is this: words that are equally likely to be used by both users will be near the center blue diagonal line. Words that one user prefers more than another will be off to the side. The units of the axis are percent of frequency. So a word with 1% frequency will mean that out of a hundred words in every tweet, that user is likely to use it once. That probably says a great deal about the level of information condensation in tweets. Lets start with the most logical comparison.
+
+### What Joseph Muscat Tweets vs. What Adrian Delia Tweets
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+JMDrin <- ggplot(frequency, aes(JosephMuscat_JM, adriandeliapn)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+JMDrin
+```
+
+Over 3% of Muscat's tweets contain '#malta'. He's also more likely to tweet about Europe ('@EUCommission', '@junkereu', '#eu', 'european') and, well, use usual politican words like '#health', 'community', 'persons', 'family', 'economy' etc.
+
+Delia is more likely to tweet to @simonbusuttil, mention 'ag', 'inquiry', or 'women', and more prone to use 'people' as opposed to Muscat's 'persons'.
+
+### How Simon Busuttil Compares to both of them
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+JMXmun <- ggplot(frequency, aes(JosephMuscat_JM, SimonBusuttil)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+
+DeliaXmun <- ggplot(frequency, aes(adriandeliapn, SimonBusuttil)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+
+JMXmun
+DeliaXmun
+```
+
+Simon Busuttil tweets overwhelmingly about '#panamapapers', 'corruption', the Pilatus Bank affair, and '#egrant' compared to *both* Joseph Muscat *and* Adrian Delia.
+
+### What is the Cabinet/Shadow Cabinet up to?
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+puliFearne <- ggplot(frequency, aes(ClydePuli, chrisfearne)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+puliFearne
+
+
+puliKonrad <- ggplot(frequency, aes(ClydePuli, KonradMizzi)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+puliKonrad
+```
+
+Chris Fearne tweets predominantly about health, his current Ministerial responsibility, and Korad Mizzi tweeted more about Energy, his past Ministerial responsibility. This means that they both use Twitter to highlight important milestones in their electoral pledges. 
+
+### Presedential Tweets versus Prime Ministerial Tweets
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+PresidentPM <- ggplot(frequency, aes(JosephMuscat_JM, presidentMT)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+PresidentPM
+```
+
+What differentiates a Prime Ministerial tweet from a Presidential one? Both the Prime Minister and the President are equally likely to use the words '#gozo', 'equity', 'families' and 'european'. 
+
+The only things the President is more likely to tweet about are 'gender', 'children' and 'rights'.
+
+### Jason Azzopardi vs. Kurt Farrugia
+
+This was an interesting comparison, since these two users have a similar, more offensive, twitter style.
+
+``````{r message=FALSE, warning=FALSE, echo=FALSE}
+KurtJase <- ggplot(frequency, aes(AzzopardiJason, KurtFarrugia)) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.2, height = 0.2) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  geom_abline(color = "blue")
+KurtJase
+```
+
+In fact, a sizeable portion of both Jason Azzopardi and Kurt Farrugia's tweets are spent replying to other users, or at least, trying to rope them in. 
+
+For Jason Azzopardi these include European Commissioner for Justice Vera Jourova, local newspaper the Malta Independent, MEP Ana Gomes who is part of the European Parliament's Ad Hoc Mission on the Rule of Law in Malta and local blogger Manuel Delia.
+
+Kurt Farrugia often ropes in his boss Joseph Muscat and '@maltagov', but is equally likely to confront Simon Busuttil or '@pnmalta'. Kurt Farrugia is also the only government user we've examined to directly reply or try to challenge allegations by activists on twitter [like the anonymous account 'BugM']([https://twitter.com/bugdavem.) How he does this is also apparent: using words like 'lie', 'false' or 'truth'.
+
+Perhaphs most fascinating is how equally likely both of these users are to tweet to Times of Malta journalists Ivan Camilleri and Jacob Borg, demonstrating just how skillful both of these users are (or at least how hard they try) at trying to peddle their side's respective narratives to the media. 
+
+
+# Sentiment of Tweets
+Using a similar procedure as [the one detailed in my article examining local news articles](https://www.charlesmercieca.com/post/text-mining-local-news-part-1/), we can quantify and visualise how much positive or negative sentiment a tweet has. 
+
+Here is what the mean sentiment score of every tweet in 2018 looks like, using the AFINN sentiment lexicon, with each dot being a tweet, and the light grey line being a perfectly neutral tweet.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+sentimentAnalysis <- tidy_tweets %>%
+  filter(ymd_hms(created_at) >= ymd("2018-01-01"))%>%
+  select(created_at, screen_name, word, source, status_id)%>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(screen_name, status_id)%>%
+  mutate(avg_sent = mean(score)) %>%
+  ggplot(aes(created_at, avg_sent, col = screen_name))+
+  geom_point(size = 2)+
+  geom_hline(yintercept = 0, color = "black", size =1, alpha = .25)+
+  facet_wrap(~screen_name)+ 
+  theme(legend.position="none")+
+  ylab("Sentiment Score")+
+  xlab("Date of Tweet")
+sentimentAnalysis
+```
+
+A few things readily stand out:
+
+* Chris Fearne, Joseph Muscat, Konrad Mizzi and the President have, generally, many more positive tweets than negative ones.
+* Adrian Delia and Kurt Farrugia adopt a balancing act, being negative and positive in equal proportions.
+* Simon Busuttil and Jason Azzopardi are more lopsided towards negative tweets than positive ones. 
+
+And here's what the polarity scores per user look like after passing all the tweet test through the *QDAP* package's polarity function. Any dot left of the vertical line passing through a polarity of 0 means that the average polarity of that user is negative, and, likewise, anything right is positive.
+
+```{r Loading & Using Polarity Objects, echo=FALSE, message=FALSE, warning=FALSE}
+load("~/R Projects/Twitter Analysis/SameTimePolarityObj.Rda")
+polarityTidyST <- PolST$group %>% select(screen_name, stan.mean.polarity)
+ggplot(polarityTidyST, 
+       aes(fct_reorder(screen_name, stan.mean.polarity), stan.mean.polarity, col = screen_name))+
+  geom_point(size = 4)+
+  geom_hline(yintercept = 0, size =1, alpha = .25)+
+  theme_bw()+
+  theme(legend.position="none")+
+  coord_flip()+
+  labs(title = "Mean Polarity by User in 2018")+
+  xlab("User")+
+  ylab("Polarity")
+
+```
+
+Now to be clear, the job of opposition figures is to criticise, while that of individuals in government is to promote their work, so the results are hardly surprising... save for two things. Adrian Delia's relatively 'positive' rating, and Kurt Farrugia's relatively 'negative' one. So what gives?
+
+I think what's happening is fascinating. From the analysis of word frequencies, we know that Kurt Farrugia's is quick to intercept criticism and heckling in an attempt to counterbalance. This is despite the fact that most of these tweets set out to target Joseph Muscat's account. Kurt Farrugia's twitter presence allows Joseph Muscat's account to not engage in these discussions himself directly. Instead, Muscat tweets about the successes and achievements of his government, giving him lopsidedly positive tweets. 
+
+Similarly, Adrian Delia's twitter presence is the most sombre of all the PN associated accounts we've looked at. He to, appears, to be more than willing to allocate the trench warfare to his deputies. 
+
+# Before this gets too long...
+## What we've learned
+
+* Joseph Muscat and Jason Azzopardi are the two most prolific twitter users we looked at. 
+* Jason Azzopardi has the longest tweets on average.
+* Joseph Muscat's account is three times more popular than the runner up, the President.
+* Joseph Muscat's account is also the most succesful in terms of getting retweets/tweet favourites.
+* Simon Busuttil tweets predominantly about ‘#panamapapers’, ‘corruption’, the Pilatus Bank affair, and ‘#egrant’.
+* Chris Fearne tweets mostly about health.
+* Konrad Mizzi tweets mostly about energy.
+* Kurt Farrugia's twitter presence is highly strategic, and a lynchpin of the "pożittività" mantra.
+
+## What I'll look at in a second post
+
+* Try to visualise the twitter network of these 9 users.
+* Other tidbits that didn't make this cut.

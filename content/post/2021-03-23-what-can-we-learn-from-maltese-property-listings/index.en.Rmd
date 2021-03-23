@@ -1,0 +1,392 @@
+---
+title: "What Can We Learn From Maltese Property Listings?"
+author: ''
+date: '2019-03-21'
+slug: what-can-we-learn-from-maltese-property-listings
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stringi)
+library(readr)
+PropertyListings <- read_csv("~/PropertyListings.csv")
+
+PropertyListingsCleaned <- PropertyListings%>%
+  filter(!is.na(AreaMSquared), PriceEuros > 60000, AreaMSquared > 0, PriceEuros < 4*IQR(PriceEuros)) %>%
+  mutate(PropertyType = str_to_title(PropertyType))
+```
+
+## Introduction
+
+I suppose a defining feature of being in your mid twenties is that you find progressively more of your small talk having to do with properties: how big they should be, which floor negates the value added by a lift, and even, when alternate conversation seems especially hard to conjure, the benefits of using one type of grout as opposed to another.
+
+Often during such conversations, I found myself wondering how much value can be extracted by an in-depth analysis. So when I came across a local property website that seemed relatively straightforward to scrape, I decided to make a weekend project of it!
+
+## The Dataset
+
+I'd estimate that around half my time on this was spent trying to extract meaningful variables, but in the end, I managed to end up with just shy of 1,500 listed properties. The two main continuous variables in this dataset are the price of the property listing in Euros, and the size in square meters. The number of bedrooms and bathrooms was also harvested, together with a whole set of categorical variables including Town, Region, the floor where applicable, and whether a property was listed as having a Garage/Views/Pool/Lift/Garden/Airconditioning/an Outside Area/if it's Furnished. 
+
+Now, I'd advise against using this data to make inferences about current property prices, since this is what people are *asking* for their property. This particular website might not even be representative of the market, because for example it might be more popular in one region of the island as opposed to another.
+
+```{r data structure}
+str(PropertyListingsCleaned)
+```
+
+## Exploring the data
+
+It turns out that the median listed price of a property on this particular website is 280,000 Euros, and the median area is 131 square meters. Here's how price is distributed, split by property type:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+PriceDistributionByPropTypeZoomed <-PropertyListingsCleaned%>% filter(PriceEuros < 2500000) %>% ggplot(aes(x = PropertyType, y = PriceEuros, fill = PropertyType))+
+  geom_violin()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+  labs(title = "Price Distribution by Property Type")+
+  xlab("Property Type")+
+  ylab("Price (Euros)")
+PriceDistributionByPropTypeZoomed
+```
+
+You can see that most apartments and maisonettes have an asking price of around 250,000 Euros, while duplexes, farmhouses and houses tend to be more variable. And a villa might cost you anywhere from 250,000 Euros to 2.5 Million.
+
+## How does Cost vary with Area?
+
+When you initially plot cost and area, the graph looks wholly uninformative, since prices and areas tend to have a few large values that hinder us from seeing any meaningful pattern. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CostVsArea <- PropertyListingsCleaned %>% filter(AreaMSquared > 0) %>% 
+  ggplot(aes(x=AreaMSquared, y = PriceEuros))+
+  geom_point()+
+  scale_y_continuous(labels = scales::comma)+
+  labs(title = "Relationship between Area and Price")
+CostVsArea
+```
+
+To fix this, we'll use a log 10 transformation that just rescales the data.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+CostVsAreaLog <- PropertyListingsCleaned %>% filter(AreaMSquared > 0) %>% 
+  ggplot(aes(x=log10(AreaMSquared), y = log10(PriceEuros)))+
+  geom_point()+
+  scale_y_continuous(labels = scales::comma)+
+  geom_smooth(method = "lm", se = F)+
+  labs(title = "Log Transformed Relationship between Area and Price")
+
+CostVsAreaLog
+```
+
+And there you have it! intuitevly, the price of a property has a linear relationship with it's area!
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+AreaDistributionByPropType <- ggplot(PropertyListingsCleaned, aes(x = PropertyType, y = log10(AreaMSquared), fill = PropertyType))+
+  geom_boxplot()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+  labs(title = "How does Area vary by Property Type?")
+AreaDistributionByPropType
+```
+
+Since this is a log10 transformation, to get the area in meters squared back, just multiply 10 by the power of that number. So, for instance, eyeballing the above, our apartments have a median area of 2.1. 10^2.1 is 125, which makes sense. 
+
+##More exploration:
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+MedianAreabyPropType = PropertyListingsCleaned %>%
+  filter(!is.na(PropertyType)) %>%
+  group_by(PropertyType) %>%
+  summarise(MedianArea = median(AreaMSquared))%>%
+  ggplot(aes(x = fct_reorder(PropertyType, MedianArea), y = MedianArea, fill = PropertyType))+
+  geom_bar(stat = "identity")+
+  theme(legend.position="none")+
+  coord_flip()+
+  labs(title = "Median Area by Property Type")+
+  xlab("Property Type")+
+  ylab("Median Area (Metres Squared)")
+MedianAreabyPropType
+
+MedianPricebyPropTypeFiltered = PropertyListingsCleaned %>%
+  filter(!is.na(PropertyType), PropertyType != "Palazzo") %>%
+  group_by(PropertyType) %>%
+  summarise(MedianPrice = median(PriceEuros))%>%
+  ggplot(aes(x = fct_reorder(PropertyType, MedianPrice), y = MedianPrice, fill = PropertyType))+
+  geom_bar(stat = "identity")+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+  labs(title = "Median Price by Property Type")+
+  xlab("Property Type")+
+  ylab("Median Price (Euros)")
+MedianPricebyPropTypeFiltered
+```
+
+## What's the cost of a metre square?
+
+This is an interesting one. What's the actual cost of a metre square by property type?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+PricePerMsquared <- PropertyListingsCleaned %>%
+  filter(AreaMSquared > 0) %>%
+  filter(!is.na(PropertyType)) %>%
+  mutate(EurosperMsquared = PriceEuros/AreaMSquared)%>%
+  group_by(PropertyType) %>%
+  summarise(MeanEurosperMSquared = mean(EurosperMsquared))%>%
+  ggplot(aes(x = fct_reorder(PropertyType, MeanEurosperMSquared), y = MeanEurosperMSquared, fill = PropertyType))+
+  geom_bar(stat = "identity")+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+  labs(title = "Mean Price/Square Metre")+
+  xlab("Property Type")+
+  ylab("Euros/Square Metre")
+PricePerMsquared
+```
+
+##Are there differences based on locality?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+##Top & Bottom 10 Localities
+NotableLocalities <- PropertyListingsCleaned %>%
+  filter(!is.na(Town), Town != "Item Not Found") %>%
+  group_by(Town) %>%
+  summarise(MedianPrice = median(PriceEuros))%>%
+  arrange(desc(MedianPrice))
+
+  top10 <- head(NotableLocalities, 10) %>% ggplot(aes(x = fct_reorder(Town, MedianPrice), y = MedianPrice, fill = Town))+
+  geom_bar(stat = "identity")+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+    labs(title = "Most Expensive Localities")+
+    xlab("Town")+
+    ylab("Median Price")
+  top10
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+bottom10 <- tail(NotableLocalities, 10) %>% ggplot(aes(x = fct_reorder(Town, -MedianPrice), y = MedianPrice, fill = Town))+
+  geom_bar(stat = "identity")+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::comma)+ 
+  theme(legend.position="none")+
+  labs(title = "Least Expensive Localities")+
+  xlab("Towns")+
+  ylab("Median Price (Euros)")
+bottom10
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ProportionPools <-PropertyListingsCleaned %>%
+  filter(!is.na(Region))%>%
+  group_by(Region)%>%
+  summarise(ProportionYes = mean(Pool == "Yes"))%>%
+  arrange(desc(ProportionYes))%>%
+  ggplot(aes(x = fct_reorder(Region, ProportionYes), y = ProportionYes, fill = Region))+
+  geom_bar(stat = "identity")+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::percent)+ 
+  theme(legend.position="none")+
+  labs(title = "Do some regions have a higher prevalence of properties with pools?")+
+  xlab("Towns")+
+  ylab("Proportion of properties that have a pool")
+ProportionPools
+```
+
+It looks like pools are more common in rural regions like Gozo and the South East, and become less common as we move into the much more heavily urbanised North and South Harbour regions.
+
+## Pondering the nice things
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+  EffectOfView <-PropertyListingsCleaned %>%
+    ggplot(aes(x = factor(Views), y = PriceEuros, fill = Views))+
+    geom_boxplot()+
+  scale_y_continuous(labels = scales::comma)+
+  theme(legend.position = "none")+
+  labs(title = "How much more do you pay for a view?")+
+  ylab("Price (Euros)")+
+  xlab("Does the property have a view?")
+  EffectOfView
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+   EffectOfPool <-PropertyListingsCleaned %>%
+    ggplot(aes(x = factor(Pool), y = PriceEuros, fill = Pool))+
+    geom_boxplot()+ 
+   scale_y_continuous(labels = scales::comma)+
+  theme(legend.position = "none")+
+  labs(title = "How much more do you pay for a pool?")+
+  ylab("Price (Euros)")+
+  xlab("Does the property have a pool?")
+
+EffectOfPool
+   
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+   EffectOfFloor <- PropertyListingsCleaned %>%
+     ggplot(aes(x = factor(Floor), y = PriceEuros, fill = Floor))+
+     geom_boxplot()+ 
+  scale_y_continuous(labels = scales::comma)+
+  theme(legend.position = "none")+
+  labs(title = "How does price increase with floor?")+
+  ylab("Price (Euros)")+
+  xlab("Floor")
+EffectOfFloor
+```
+
+Seems pretty intuitive so far. Having a pool or a view and being higher up all lead to higher prices. That being said, it's not ideal to look at these variables in isolation like this, since for instance having a pool might also be associated with a higher prevalence of having a view or having a larger property area. To which will you then attribute the increase in property price? 
+
+The correct way would be to deploy a linear model! 
+
+##Linear Modeling Time!
+
+First, let's fit a linear model to the relationship between price and area of a property.
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+PropertyData <-PropertyListingsCleaned %>%
+  filter(Outside %in% c("Yes", "No"))%>%
+  select(-`Listing Name`, -PropertyID, -TextDescription, -Bathrooms, -Town, -Airconditioning)%>%
+  mutate(Views = as.factor(Views),
+         Pool = as.factor(Pool), Lifts = as.factor(Lifts), 
+         Garden = as.factor(Garden), Region = as.factor(Region), PropertyType = as.factor(PropertyType), Bedrooms = as.numeric(Bedrooms), Furnished = as.factor(Furnished), Outside = as.factor(Outside))
+```
+
+```{r}
+CompleteCases <- PropertyData[complete.cases(PropertyData), ]
+SimpleLM <- lm(PriceEuros ~ AreaMSquared, data = CompleteCases)
+summary(SimpleLM)
+```
+
+Our bare bones linear model tells us that the average price of a listed property is 212,789 euros, and goes up by 769 euros each additional square metre we add. However the R-squared value, which tells us how well our model fits the data is dreadful, showing we manage to explain only around 14% of the variance in the data. 
+
+What happens if we throw in every single variable we have?
+
+```{r}
+ComplexLM <- lm(PriceEuros ~ ., data = CompleteCases)
+summary(ComplexLM)
+```
+
+We're now managing to explain 46% of the variance present in the dataset, as well as being able to assess the relative importance of the features. 
+
+For instance, if a property is furnished, the addition to the value is around 56,500 euros. If this seems high, it might be because other factors are at play. For instance, a large number of properties listed as unfurnished might be in shell status, requiring further work, resulting in them being listed at a lower price.
+
+Floor was an interesting one: the only statistically significant effect was when a property was higher than the 5th floor. For the priviledge of looking down on 4 floors, you'll fork out an extra 114,338 euros.
+
+Price also goes up by 70,000 Euros for each additional bedroom(this is probably measuring the same thing as area, since these two measures are probably highly correlated), and the steepest premiums are paid to live in the Northen Harbour (~217k Euros) and Western (~175k Euros) regions respectively.
+
+I think we can do better.
+
+## Onwards to Decision Trees!
+In my experience it's pretty hard explaining the above to a general audience, and the linear model framework was not fitting overly well. So let's try another framework that might be better at this, with the added bonus that it's easier to understand.
+
+Decision trees split the data into sub populations using the variables it thinks generate the best splits. To test the quality of the decision tree we'll be building, I've split the data randomly. We'll use 80% of it to train our model, and 20% of it to assess it's performance on new "unseen" data.
+
+```{r}
+##Generate Train/Test Split
+set.seed(2019)  
+sample <- sample.int(n = nrow(CompleteCases), size = floor(.8*nrow(CompleteCases)), replace = F)
+
+train <- CompleteCases[sample, ]
+test  <- CompleteCases[-sample, ]
+```
+
+The benefits of decision trees are twofold: they might pick up on complex non-linear relationships that linear modeling can't, and they produce wonderful intuitive graphs like this one:
+
+```{r warning=FALSE}
+library(rpart)
+library(rpart.plot)
+
+tree <- rpart(PriceEuros ~ ., data = train, cp = 0.02)
+
+rpart.plot(tree, box.palette="RdBu",)
+```
+
+What our decision tree is telling us, starting from the top, is that it thinks that the average price of a property is 322,000 Euros. Then comes the first split: the model has determined that the best variable to split on is area. If the area is less than 213 metres squared, we go left. 93% of the listed properties fall under this bracket. 
+
+It's also decided to split one more time using area. If our property's area is less than 129 metres squared, we go left once again. Region now becomes important. If we're in Gozo, we go left again. 12% of our properties meet this criteria, and their price is around 164,000 Euros. For the 41% of properties with an area less than 129 metres squared that are not in Gozo, their price is around 265,000 euros. This tells us that property in Gozo is cheaper. 
+
+Let's go back up to area is less than 129 metres squared and go right this time. Here we're saying no, so our property is larger than 129 metres squared, but smaller than the 213 of the split above it. Let's pretend our region isn't Gozo, South Eastern or Southern Harbour, so right once again. Now whether our property has a view becomes a factor. This is where it might get a bit counterintuitive. If Views = No is yes, that is, the property does not have a view, its listed price is around 344,000 Euros. If a property has a view, it's listed price jumps up to 516,000 Euros - these are probably your Portomaso apartments and Siggiewi villa's.
+
+So how good is our single humble tree at predicting?
+
+```{r warning=FALSE}
+TreePreds <- predict(tree, test)
+
+library(Metrics)# Has a handy inbuilt RMSE function!
+rmse(TreePreds, test$PriceEuros)
+```
+
+Not overly good: on average it's off by 146,000 euros.
+
+Just to give you an idea of what that looks like in real life, here are the first 5 predictions of the model using the test data that it's never seen before, compared with the actual price these properties were listed at:
+
+```{r echo=TRUE, warning=FALSE}
+data.frame("PredictedPrice" = TreePreds, "ActualListedPrice" = test$PriceEuros) %>%
+  head()
+```
+
+It's pretty close on the 1st, 2nd and 6th occasion, but way off on the 3rd, 4th and 5th. Part of the reason might be that these are listed requested prices, and some sellers are more optimistic than others. Take the 2nd and 3rd case for instance. The model predicted the same value, which probably means it saw similar regional/area/view etc. splits in both cases.
+
+We can easily confirm this if we look at the 2nd and 3rd rows of our testing data:
+
+```{r}
+test[2:3,]
+```
+
+And indeed, the only difference is in bedrooms and region, but the listed price varies dramatically. Let's beef up our approach: instead of one tree, we'll grow many, and average their outputs. To do this we'll use the Caret package.
+
+```{r warning=FALSE}
+library(caret)
+myControl <- trainControl(method = "cv", number = 5, verboseIter = TRUE)
+model_rf <- train(PriceEuros ~ ., 
+              data = train,
+              tuneLength = 1,
+              method = "rf",
+              trControl = myControl,
+              importance = T)
+
+plot(model_rf$finalModel)
+```
+
+The above is the random forest in action, reducing the error as it fits progressively more decision trees. There are marginal accuracy returns beyond 50 trees, and by 100 the plateau tells us that each additional tree is not worth the computation time. 
+
+So, did this procedure increase accuracy? Let's find out!
+
+```{r}
+rfpred <- predict(model_rf, test)
+rmse(rfpred, test$PriceEuros)
+data.frame("PredictedPrice" = rfpred, "ActualListedPrice" = test$PriceEuros) %>%
+  head()
+
+```
+
+Yes! We've reduced our error to 128,000 euros! At this point, if the end aim of this excersise was to train a model to predict the price of a listing based on attributes, we'd probably go back to the data and try to scale and create more meaningful variables. 
+
+But it's not, and since this post is getting long as it is, I'll show you one last advantage of random forests: we can also use them to see which features it thinks are important! Which was sort of the point of all of this!
+
+```{r}
+varImp(model_rf)$importance %>% 
+  as.data.frame() %>%
+  rownames_to_column() %>%
+  arrange(Overall) %>%
+  mutate(Feature = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x=Feature, y=Overall)) + 
+  geom_point(col="tomato2", size=3) + 
+  geom_segment(aes(x=Feature, 
+                   xend=Feature, 
+                   y=min(Overall), 
+                   yend=max(Overall)), 
+               linetype="dashed", 
+               size=0.1) +  
+  labs(title="Overall Importance of Feature",
+       subtitle = "As Assessed by Random Forest")+
+       ylab("Importance") +  
+  coord_flip()+
+  theme_classic()
+```
+
+Perhaps the best way to think about the above would be as a ranking of which features generate the cleanest, most pure splits. These might not necessarily be the ones that add most value to a property, but they help us distinguish between a less expensive and a more expensive listing. 
