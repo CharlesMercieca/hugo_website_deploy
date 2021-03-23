@@ -1,0 +1,265 @@
+---
+title: "Text Mining Local News (Part 1)"
+author: "Charles Mercieca"
+date: '2018-09-24'
+slug: text-mining-local-news-part-1
+subtitle: ''
+tags: []
+categories: []
+---
+
+
+
+<div id="introduction-why-text-mine-the-local-news" class="section level2">
+<h2>Introduction: Why Text Mine the Local News?</h2>
+<p>Media ‘slant’ is a fascinating topic. Ask anyone who reads the news, and they’ll probably have a reason for choosing one media source over another. Invariably, that reason often turns out to be because, according to them, the one they read isn’t biased and all the others are.</p>
+<p>The starting point of this post was an attempt to recreate <a href="https://www.adfontesmedia.com/the-chart-second-edition/">this graph for the local news context.</a> But as soon as I started, I realised that I was only working off my own subjective opinions. The rest of this post is an attempt at an objective analysis to see if text mining principles implemented in the R programming language can offer more objective insights into how local media is different, and in what ways it is similar.</p>
+<div id="what-this-post-is-not-about" class="section level3">
+<h3>What this post is not about</h3>
+<p>It’s not about discrediting any media outlet, and it’s certainly not about individual journalists. An organisation’s journalists might themselves have no idea that they’re even biased: ‘groupthink’, or working in a bubble with other people who tend to share several sociocultural factors that might not reflect the broader population <a href="https://fivethirtyeight.com/features/there-really-was-a-liberal-media-bubble/">has in the past led several newsrooms up strange avenues.</a></p>
+</div>
+</div>
+<div id="the-data-a-summer-of-maltese-news" class="section level2">
+<h2>The Data: A Summer of Maltese News</h2>
+<p>Over a three month period spanning June 21st to September 21st, I collected news from these 5 English language news websites/current events blogs:</p>
+<ul>
+<li><p><a href="https://www.timesofmalta.com/">Times of Malta</a>, the oldest daily newspaper, having both the largest physical circulation and the most views of any Maltese website <a href="https://www.alexa.com/topsites/countries/MT">according to Alexa Internet.</a></p></li>
+<li><p><a href="https://maltatoday.com.mt">Malta Today</a>, a weekly newspaper with extensive political, court and environmental issues reporting. Alexa Internet rank: 8.</p></li>
+<li><p><a href="https://newsbook.com.mt">Newsbook</a>, a leaner, contemporary offshoot of RTK, a media organisation owned by the Archdiocese of Malta. Alexa Internet rank: 7.</p></li>
+<li><p><a href="https://lovinmalta.com">Lovin Malta</a>, the local franchise of the Lovin Media group.</p></li>
+<li><p><a href="http://manueldelia.com">Manuel Delia’s <em>Truth be Told</em></a>, a current events blog.</p></li>
+</ul>
+<p>All articles selected were not behind any paywalls. Only English content was selected from websites that had bilingual articles(Newsbook), and only items listed as local news were analysed. The data was stored in a 4 column table, containing the article title, date, article text and publisher. The corpus, in it’s entirely, contained 1.8 million words.</p>
+<p><img src="https://scontent.fmla1-2.fna.fbcdn.net/v/t1.0-9/42417314_10212891718716850_4886485619527647232_o.jpg?_nc_cat=101&amp;oh=d628265dae4aa29afa494d52382bb17b&amp;oe=5C3169E3" /></p>
+</div>
+<div id="section" class="section level1">
+<h1></h1>
+<p>The whole dataframe looks something like the above, for another 5,300+ rows.</p>
+<p>Here are the number of articles per publication we’ll be examining:</p>
+<pre class="r"><code>articles %&gt;% group_by(Publisher) %&gt;% count()</code></pre>
+<pre><code>## # A tibble: 5 x 2
+## # Groups:   Publisher [5]
+##   Publisher        n
+##   &lt;chr&gt;        &lt;int&gt;
+## 1 Lovin Malta    646
+## 2 MaltaToday     876
+## 3 ManuelDelia    300
+## 4 Newsbook      1734
+## 5 TimesOfMalta  1820</code></pre>
+<div id="the-most-common-publishing-time-for-news" class="section level2">
+<h2>The Most Common Publishing Time for News?</h2>
+<p>With the exception of Lovin Malta, which doesn’t give a timestamp in their date field, we can plot the number of articles published in each hour:</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-3-1.png" width="672" /></p>
+<p>The hour with the largest number of articles is 11. Times of Malta seems to take an early bird approach, with posts starting as early as 6, while Newsbook adopts more of a night owl approach, posting consistently into the late hours of 9 and 10.</p>
+</div>
+<div id="average-pieces-of-local-news-per-day" class="section level2">
+<h2>Average pieces of ‘Local News’ Per Day?</h2>
+<pre class="r"><code>articles %&gt;% 
+    mutate(day = floor_date(Date, unit = &quot;day&quot;)) %&gt;% 
+    group_by(day, Publisher) %&gt;% 
+    count()%&gt;% 
+    group_by(Publisher) %&gt;% 
+    summarise(Average_Articles_Per_Day = mean(n))</code></pre>
+<pre><code>## # A tibble: 5 x 2
+##   Publisher    Average_Articles_Per_Day
+##   &lt;chr&gt;                           &lt;dbl&gt;
+## 1 Lovin Malta                      6.73
+## 2 MaltaToday                       9.12
+## 3 ManuelDelia                      4.55
+## 4 Newsbook                        18.4 
+## 5 TimesOfMalta                    19.4</code></pre>
+</div>
+<div id="word-counts-of-titles-and-articles" class="section level2">
+<h2>Word Counts of Titles and Articles</h2>
+<p>Alright, time to start analysing the actual text! Who has the longest titles? Who has the shortest ones?</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-1.png" width="672" /></p>
+<p>The longest headlines are written by Lovin Malta, who average double the words of Manuel Delia or Newsbook. Interestingly, Lovin Malta’s articles are among the shortest, which hints to the top heavy structure of their articles. It’s probably no accident that Manuel Delia is the exact opposite, and that Malta Today and Times of Malta are so similar to each other.</p>
+<p>But besides one aggregated average, the power of R can give us something better! We can take each individual article, and plot the distribution of how many of Newsbook’s headlines were 10 words vs 9 words in length for instance!</p>
+<p>Enter the mighty violin plot:</p>
+<pre class="r"><code>  ggplot(articles, aes(Publisher, titlewordcount, fill = Publisher))+
+    geom_violin()+
+    ylab(&quot;Word Count - Title&quot;)+
+    theme_bw()+
+    theme(legend.position=&quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>What the graph shows is that Times of Malta and Newsbook have a smaller variance in title length: most are either 7-11 words in length, while very few are shorter or longer. Contrast this with Manuel Delia for instance, where the most common title length is around the 6-7 mark, while longer titles are rare but not unheard of.</p>
+<p>We can do the same for the article bodies:</p>
+<pre class="r"><code> ggplot(articles, aes(Publisher, bodywordcount, fill = Publisher))+
+    geom_violin()+
+    ylim(0, 2000)+
+    theme_bw()+
+    theme(legend.position=&quot;none&quot;)+
+    ylab(&quot;Word Count - Body&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>##What are the most common words?
+I’ve been wanting to use the tidytext package ever since I read Julia Silge and David Robinson’s fantastic book <a href="https://www.amazon.com/Text-Mining-R-Tidy-Approach/dp/1491981652"><em>Text Mining with R: A Tidy Approach…</em></a> and hey, this was just the chance!</p>
+<p>Let’s start off with something simple, what are the most common words that local Publishers have used in a whole summer of covering the news? Well to answer this question, we’ll have to first turn our first table into a slightly different one, where each word will be a row. We can achieve this by using the unnest_tokens function from the tidytext package. This lets us count the number of times a specific word, like government, is present in the whole text corpus.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Unigram-1.png" width="672" /></p>
+<p>Common English words like ‘The’, “is”, “at”, “which”, or “on” (called stopwords) would naturally have the highest frequency, and top the chart. But since these words do not provide and meaningful information, they are filtered away. Besides a list of the standard English stopwords that tidytext has, I also added a separate list that filtered out things like “Malta”, “Malta’s” and the names of several staff photographers - since their photos tend to be captioned, their names also dominated.</p>
+<p>But even with these steps, our top 10 words are hardly insightful. Most words were about the police, ministers, court or government - or exactly what’s in the news.</p>
+<p>A more meaningful way to look into what the publications are writing about is to see what words, say, Manuel Delia would use more frequently compared to Lovin Malta. Since almost all publications will report about a government decision or court case, we need a method that penalises common terms across the entire text corpus and promotes terms unique to that website.</p>
+<p>The field of Information Retrieval has had a solution for this since the late 1980’s, called term frequency-inverse document frequency, often abbreviated as <em>TF-IDF</em>. A more thorough explanation of TF-IDF <a href="https://en.wikipedia.org/wiki/Tf%E2%80%93idf">can be found in it’s wikipedia entry here</a>, but for our purposes, all we really need to know is this:</p>
+<p>If Times Of Malta wrote 5 articles about colour purple, and a 100 articles about court cases, while other publications also wrote a large number of articles about court but none about the colour purple, Times of Malta’s TF-IDF score for “purple” would be very high, but Times of Malta’s TF-IDF score for “court” would be very low.</p>
+<p>Here’s what the top 12 TF-IDF terms are, using tidytext’s bind_tf_idf() function.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Unigram%20TF-IDF-1.png" width="672" /></p>
+<p>That’s an improvement! Lovin Malta is more likely than anyone else to talk about weight lifting champion <a href="https://lovinmalta.com/news/news-sport/incredible-yazmin-zammit-stevens-snatches-first-place-in-international-weightlifting-competition">Yazmin Zammit Stevens</a>, the Daniel Holmes case and <a href="https://lovinmalta.com/lifestyle/geek/it-still-feels-unreal-first-maltese-person-to-reach-1-million-subscribers-opens-up-about-choosing-youtube-over-a-medical-degree">Maltese YouTuber Grandayy</a>.</p>
+<p>Malta Today was more likely to use the terms “panamagate” and “underscored” - the result of either stylistic choices, or an individual journalist’s predisposition to use one term over the other.</p>
+<p>Manuel Delia was more concerned with financial and corporate terms like “equities”, “enterprises” and “incorporated”, <a href="https://manueldelia.com/?s=negarin">and the sister of Ali Sadr, of Pilatus bank fame.</a></p>
+<p>Interestingly, the town of “Zebbug” scored high for both Newsbook and Times of Malta. <a href="https://www.newsbook.com.mt/?s=zebbug&amp;datefrom=21-06-2018&amp;dateto=21-09-2018&amp;author=">A quick check reveals that this is indeed correct</a>, with many happenings in Zebbug… compounded by the fact that there are two Zebbugs, one in Malta and the other in Gozo. Newsbook’s “inquest” is also interesting, since it’s probably a different stylistic choice to the same material that was “panamagate” in Malta Today’s pane.</p>
+<p>“Emissions” scored high in TF-IDF for Times of Malta as <a href="https://www.timesofmalta.com/articles/view/20180705/local/ship-emissions-cost-24m-in-health-environment-damage.683564">a result of a summer long series on the harmful impact of ship emissions on air quality.</a>.</p>
+<p>Also noteworthy is the overlap of some terms in two publications: mater [dei hospital] managed to score high in TF-IDF for both Newsbook and Times of Malta, which means those two media houses either report on hospital affairs more frequently than the three others, or, that the others use a different term, like only “hospital”. This is also true for “Marsa” and “Regatta” - the site of a prolific arrest.</p>
+<p>##Bigrams!</p>
+<p>So far, we’ve only been examining bigrams, or single words. More insight can be gleamed from the knowing which word is most likely to pair with another.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Bigrams!-1.png" width="672" /></p>
+<p>One of the things I was most struck by about after reading <a href="https://www.amazon.com/Text-Mining-R-Tidy-Approach/dp/1491981652"><em>Text Mining with R</em></a> was <a href="https://www.tidytextmining.com/ngrams.html#visualizing-a-network-of-bigrams-with-ggraph">how intiutively bigrams translate into networks.</a></p>
+<p>By using the <em>igraph</em> package, to convert the bigrams into a network, they can then be plotted like this:</p>
+<pre><code>## IGRAPH 80e6622 DN-- 251 179 -- 
+## + attr: name (v/c), n (e/n)
+## + edges from 80e6622 (vertex names):
+##  [1] prime      -&gt;minister   caruana    -&gt;galizia    joseph     -&gt;muscat    
+##  [4] daphne     -&gt;caruana    adrian     -&gt;delia      pilatus    -&gt;bank      
+##  [7] money      -&gt;laundering egrant     -&gt;inquiry    nationalist-&gt;party     
+## [10] minister   -&gt;joseph     simon      -&gt;busuttil   mater      -&gt;dei       
+## [13] planning   -&gt;authority  konrad     -&gt;mizzi      labour     -&gt;party     
+## [16] keith      -&gt;schembri   social     -&gt;media      dei        -&gt;hospital  
+## [19] leader     -&gt;adrian     opposition -&gt;leader     magisterial-&gt;inquiry   
+## [22] local      -&gt;council    dr         -&gt;delia      sunday     -&gt;times     
+## + ... omitted several edges</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Network-1.png" width="816" /></p>
+<p>I’ve set the thickness of the lines to correspond to the frequency of the pairs.</p>
+<p>Probably the best way to think of this would be a map of the landmarks of news this summer: Proper names of people who were in the news, <a href="https://www.timesofmalta.com/articles/view/20180807/local/finance-minister-gets-to-know-of-274-million-direct-order-from.686217">the 274 million Euro direct order for an elderly home</a>, the company 17 Black, the Gozo Channel deal, magisterial inquiries, FIAU reports, and M.V. Lifeline, among others.</p>
+<p>##Sentiment Analysis
+### “Tkunux Negattivi” ~ <a href="https://twitter.com/kurtfarrugia?lang=en">Kurt Farrugia</a></p>
+<p>Malta is rarely first in anything, but before ‘fake news’ became the standard method of dismissal, politicians had already been using their own indigenous solution: as soon as some pesky reporter starts asking disagreeable questions, point out the bias of his publication to covering the negativity in the world.</p>
+<p>So how ‘negative’ is local news? Before we find out, some of you might be wondering how computers can ‘read’ sentiment. The answer is in a more rudimentary way than you probably assumed. The starting point is a sentiment lexicon, similar to a dictionary of words that have been manually tagged to an emotion.</p>
+<p>Some sentiment lexicons have a mapping of a word to an emotion: the word <em>fury</em> for example corresponds to the emotion <em>anger</em>. The AFINN sentiment lexicon I’ll use here was developed by <a href="http://neuro.imm.dtu.dk/wiki/Finn_%C3%85rup_Nielsen">Finn ?rup Nielsen</a> and is slightly different.</p>
+<p>He tagged 2476 English words with a sentiment score between -5 (very negative) to +5 (very positive). Here’s what the first 10 entries of the AFINN sentiment lexicon look like:</p>
+<pre class="r"><code>get_sentiments(&quot;afinn&quot;) %&gt;%
+  head(n=10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    word       value
+##    &lt;chr&gt;      &lt;dbl&gt;
+##  1 abandon       -2
+##  2 abandoned     -2
+##  3 abandons      -2
+##  4 abducted      -2
+##  5 abduction     -2
+##  6 abductions    -2
+##  7 abhor         -3
+##  8 abhorred      -3
+##  9 abhorrent     -3
+## 10 abhors        -3</code></pre>
+<p>Yikes. In case you’re wondering, it also has happy words.</p>
+<pre class="r"><code>get_sentiments(&quot;afinn&quot;) %&gt;%
+  filter(value &gt;= 4) %&gt;%
+  head(n=10)</code></pre>
+<pre><code>## # A tibble: 10 x 2
+##    word         value
+##    &lt;chr&gt;        &lt;dbl&gt;
+##  1 amazing          4
+##  2 awesome          4
+##  3 breathtaking     5
+##  4 brilliant        4
+##  5 ecstatic         4
+##  6 euphoric         4
+##  7 exuberant        4
+##  8 fabulous         4
+##  9 fantastic        4
+## 10 fun              4</code></pre>
+<p>Next, we take all our previously unnested tokens, and see what words appear both in the corpus of our articles, and the sentiment lexicon. Think of it as two overlapping Venn diagrams.</p>
+<p><img src="https://scontent.fmla1-2.fna.fbcdn.net/v/t1.0-9/42360726_10212891890001132_8481179538959630336_o.jpg?_nc_cat=110&amp;oh=54ccda3e55a91160029af4f591b6c114&amp;oe=5C1D43C4" /></p>
+<p>Grouping by day allows us to get the average sentiment per publication per day, which lends itself well to comparing both fluctuations in polarity between publishers on the same day, and the same publisher across different days.</p>
+<pre class="r"><code>sentiment_by_time %&gt;%
+   count(date, Publisher, value) %&gt;%
+   mutate(weighted_sent = value * n) %&gt;%
+   group_by(Publisher, date) %&gt;%
+   mutate(avg_sent = mean(weighted_sent)) %&gt;%
+   filter(avg_sent &lt;50) %&gt;%
+   ggplot(aes(date, avg_sent, col = Publisher)) +
+   geom_line(size = 1.5) +
+   expand_limits(y = 0) +
+   facet_wrap(~ Publisher, nrow = 5)+
+   theme(legend.position=&quot;none&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p>So, what does the above graph show? Sentiment in local news tends to be more negative than positive on most days, although some days do manage to buck the trend. What I was more surprised about is how closely several publications manage to mirror each other at times.</p>
+<p>It’s worth pointing out that when measuring sentiment like this, there’s no real limit against which to compare a ‘good’ or ‘bad’ score, but as a general rule, on most days, the polarity of articles is more inclined to being negative than positive.</p>
+<p>With that in mind, let’s try one last thing.</p>
+<p>##Sentiment take 2
+### ‘Tghid vera negattivi?’
+Many things about R are fantastic, but the one that tops them all has to be the sheer amount of exceptional packages available for it. Enter the <a href="https://en.wikipedia.org/wiki/Quantitative_Discourse_Analysis_Package">Quantitative Discourse Analysis Package</a>, and it’s polarity function.</p>
+<p>QDAP’s polarity is much more sophisticated than the rudimentary scoring I did. It examines whole content clusters, rather than words, and can determine not only if a word is positive or negative, but do some pretty impressive things. It can handle negators (<em>not good</em> is recognized as negative), amplifiers (it scores <em>very good</em> higher than just <em>good</em>), and more importantly, it returns a value between 1 (perfectly positive) and -1 (perfectly negative), with 0 being neutral.</p>
+<p>Here’s what QDAP’s polarity score looks like for each publication:</p>
+<pre class="r"><code>load(&quot;C:/Users/Charles Mercieca/Documents/RProjects/Local News Text Analysis/polarityobject.RData&quot;)
+polarity_tidy&lt;-polarity_object$group %&gt;% select(Publisher, ave.polarity, sd.polarity)
+ggplot(polarity_tidy, aes(Publisher, ave.polarity, col = Publisher)) +
+    geom_point(size = 5)+
+  #Red, &#39;fully negative&#39; line.
+    geom_hline(yintercept = -1, color = &quot;red&quot;, size = 2, linetype = &quot;dotted&quot;)+
+  #Blue, &#39;fully positive&#39; line.
+    geom_hline(yintercept = 1, color = &quot;Blue&quot;, size = 2, linetype = &quot;dotted&quot;)+
+  #Black, &#39;neutral&#39; line.
+    geom_hline(yintercept = 0, color = &quot;black&quot;, size =1, alpha = .5)+
+    theme_bw()+
+    theme(legend.position=&quot;none&quot;)+
+    ggtitle(&quot;QDAP Polarity Scores of Local News over the Summer&quot;)+
+    ylab(&quot;Average Polarity Score&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
+<p>The maximum positive value is given by the blue dotted line, and the maximum negative value is given by the red dotted line.</p>
+<p>In the grand scheme of things: slightly negative polarity, but hardly gut wrenching Jeremiads. Instead, what probably tends to happen is that events that are more likely to lead to negative polarity words probably get reported on more than ones that are more likely to lead to positive polarity words. <a href="https://www.theguardian.com/commentisfree/2018/feb/17/steven-pinker-media-negative-news">Stephen Pinker agrees.</a></p>
+<p>Here are a few examples of words that QDAP’s polarity function rated as positive:</p>
+<pre class="r"><code>head(polarity_object$all$pos.words)</code></pre>
+<pre><code>## [[1]]
+## [1] &quot;steady&quot;    &quot;top&quot;       &quot;better&quot;    &quot;stronger&quot;  &quot;compliant&quot;
+## 
+## [[2]]
+##  [1] &quot;affordable&quot;  &quot;proper&quot;      &quot;lead&quot;        &quot;orderly&quot;     &quot;credible&quot;   
+##  [6] &quot;positive&quot;    &quot;important&quot;   &quot;prudent&quot;     &quot;realistic&quot;   &quot;sustainable&quot;
+## [11] &quot;affordable&quot;  &quot;free&quot;        &quot;protect&quot;     &quot;benefits&quot;    &quot;good&quot;       
+## [16] &quot;fast&quot;        &quot;enough&quot;      &quot;available&quot;  
+## 
+## [[3]]
+## [1] &quot;led&quot;         &quot;appropriate&quot;
+## 
+## [[4]]
+##  [1] &quot;solidarity&quot; &quot;right&quot;      &quot;solidarity&quot; &quot;solidarity&quot; &quot;solidarity&quot;
+##  [6] &quot;well&quot;       &quot;solidarity&quot; &quot;easier&quot;     &quot;solidarity&quot; &quot;approval&quot;  
+## [11] &quot;solidarity&quot; &quot;wise&quot;       &quot;gracious&quot;   &quot;better&quot;    
+## 
+## [[5]]
+## [1] &quot;support&quot;        &quot;innovation&quot;     &quot;robust&quot;         &quot;recommendation&quot;
+## 
+## [[6]]
+## [1] &quot;important&quot; &quot;best&quot;      &quot;prompt&quot;    &quot;award&quot;     &quot;qualify&quot;</code></pre>
+<p>And here are the negative ones:</p>
+<pre class="r"><code>head(polarity_object$all$neg.words)</code></pre>
+<pre><code>## [[1]]
+## [1] &quot;weak&quot;     &quot;gross&quot;    &quot;risks&quot;    &quot;subdued&quot;  &quot;wound&quot;    &quot;warned&quot;   &quot;downside&quot;
+## [8] &quot;risks&quot;    &quot;risks&quot;   
+## 
+## [[2]]
+##  [1] &quot;poverty&quot;       &quot;warned&quot;        &quot;underestimate&quot; &quot;incorrect&quot;    
+##  [5] &quot;vulnerable&quot;    &quot;limit&quot;         &quot;slow&quot;          &quot;warned&quot;       
+##  [9] &quot;beware&quot;        &quot;unjustified&quot;   &quot;interference&quot;  &quot;reluctant&quot;    
+## [13] &quot;worry&quot;         &quot;expensive&quot;     &quot;expensive&quot;     &quot;misleading&quot;   
+## [17] &quot;problems&quot;     
+## 
+## [[3]]
+## [1] &quot;denied&quot;    &quot;lengthy&quot;   &quot;dangerous&quot; &quot;denied&quot;    &quot;refused&quot;   &quot;hardships&quot;
+## [7] &quot;died&quot;     
+## 
+## [[4]]
+## [1] &quot;burden&quot;     &quot;warned&quot;     &quot;crisis&quot;     &quot;shake&quot;      &quot;burden&quot;    
+## [6] &quot;poor&quot;       &quot;poverty&quot;    &quot;worse&quot;      &quot;opposition&quot;
+## 
+## [[5]]
+##  [1] &quot;warned&quot;      &quot;crime&quot;       &quot;threat&quot;      &quot;threats&quot;     &quot;issues&quot;     
+##  [6] &quot;problematic&quot; &quot;abuse&quot;       &quot;criminal&quot;    &quot;extortion&quot;   &quot;attacks&quot;    
+## [11] &quot;criminal&quot;    &quot;abuse&quot;       &quot;crime&quot;       &quot;reluctant&quot;   &quot;refusing&quot;   
+## [16] &quot;abuse&quot;       &quot;set up&quot;     
+## 
+## [[6]]
+## [1] &quot;protest&quot;    &quot;condemned&quot;  &quot;outrage&quot;    &quot;harassment&quot; &quot;irked&quot;</code></pre>
+<p>##In Conclusion
+The average local news article over this summer had a title 9 words long, and a body word count of 318. It was most likely published around 11am, and some publishers exhibited a tendancy to use some words more than others. The average sentiment was negative, but not overly so, given the nature of what makes the news.</p>
+</div>
+</div>
