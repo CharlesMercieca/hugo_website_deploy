@@ -17,7 +17,7 @@ library(tidytext)
 library(scales)
 library(gridExtra)
 
-load("~/R Projects/Twitter Analysis/manytimelines.Rda")
+load("C:/Users/Charles Mercieca/Documents/manytimelines.Rda")
 
 histUnfiltered <- ggplot(Timelines2, aes(x=ymd_hms(created_at), fill = screen_name))+
   geom_histogram(position = "identity", bins = 100, show.legend = F)+
@@ -310,7 +310,7 @@ sentimentAnalysis <- tidy_tweets %>%
   select(created_at, screen_name, word, source, status_id)%>%
   inner_join(get_sentiments("afinn")) %>%
   group_by(screen_name, status_id)%>%
-  mutate(avg_sent = mean(score)) %>%
+  mutate(avg_sent = mean(value)) %>%
   ggplot(aes(created_at, avg_sent, col = screen_name))+
   geom_point(size = 2)+
   geom_hline(yintercept = 0, color = "black", size =1, alpha = .25)+
@@ -330,7 +330,7 @@ A few things readily stand out:
 And here's what the polarity scores per user look like after passing all the tweet test through the *QDAP* package's polarity function. Any dot left of the vertical line passing through a polarity of 0 means that the average polarity of that user is negative, and, likewise, anything right is positive.
 
 ```{r Loading & Using Polarity Objects, echo=FALSE, message=FALSE, warning=FALSE}
-load("~/R Projects/Twitter Analysis/SameTimePolarityObj.Rda")
+load("C:/Users/Charles Mercieca/Documents/SameTimePolarityObj.Rda")
 polarityTidyST <- PolST$group %>% select(screen_name, stan.mean.polarity)
 ggplot(polarityTidyST, 
        aes(fct_reorder(screen_name, stan.mean.polarity), stan.mean.polarity, col = screen_name))+

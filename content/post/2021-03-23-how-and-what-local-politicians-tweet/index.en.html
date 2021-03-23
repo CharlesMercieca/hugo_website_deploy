@@ -1,15 +1,171 @@
 ---
-title: How And What Local Politicians Tweet
-author: ''
-date: '2021-03-23'
-slug: []
+title: "How And What Local Politicians Tweet"
+author: "Charles Mercieca"
+date: '2018-11-13'
+slug: how-and-what-local-politicians-tweet
 categories: []
 tags: []
-type: ''
 subtitle: ''
-image: ''
 ---
 
 
 
-
+<div id="introduction-political-tweets" class="section level1">
+<h1>Introduction: Political Tweets</h1>
+<p>Politics has always been concerned with using any available method of mass media to disseminate its message, and social media is no exception. In Malta, <a href="http://www.independent.com.mt/articles/2018-05-24/business-news/Social-media-usage-trends-in-Malta-in-2018-6736190407">the most popular social media sites, by share of their usage are, according to a May 2018 Misco survey:</a></p>
+<ul>
+<li>Facebook (87% of the population)</li>
+<li>Google+ (50%)</li>
+<li>YouTube (46%)</li>
+<li>Instagram (24%)</li>
+<li>Twitter (12%)</li>
+</ul>
+<p>I’ve yet to come across anyone who actually uses Google+ regularly, so those answers are probably people who just have an account. And since YouTube and Instagram aren’t discussion oriented, you can make the case that most political discourse is on either Facebook or Twitter. Since by default most of what is said on Twitter is public, and Twitter has an API which is a dream to use in comparison to Facebook’s, this blog post will look solely at public Twitter data, obtained by querying the Twitter API, <a href="https://towardsdatascience.com/access-data-from-twitter-api-using-r-and-or-python-b8ac342d3efe">for which I used this fantastic tutorial.</a></p>
+<p><img src="https://scontent.fmla3-1.fna.fbcdn.net/v/t1.0-9/46153860_10213207674735553_3792335794564235264_n.jpg?_nc_cat=102&amp;_nc_ht=scontent.fmla3-1.fna&amp;oh=657ac1f63cbf301a17c614420678b63b&amp;oe=5C67E043" /></p>
+<div id="the-politicians" class="section level2">
+<h2>The Politicians</h2>
+<p>9 public profiles were examined:</p>
+<ul>
+<li>Joseph Muscat, Prime Minister</li>
+<li>Adrian Delia, Leader of the Opposition</li>
+<li>Marie Louise Coleiro Preca, President</li>
+<li>Simon Busutti, former Leader of the Opposition</li>
+<li>Jason Azzopardi, MP and relatively vocal on Twitter</li>
+<li>Chris Fearne, Deputy Prime Minister</li>
+<li>Konrad Mizzi, Minister for Tourism</li>
+<li>Kurt Farrugia, Prime Minister’s Head of Communications</li>
+<li>Clyde Puli, Opposition MP</li>
+</ul>
+</div>
+<div id="the-data" class="section level2">
+<h2>The Data</h2>
+<p>Using the Twitter API, one can request up to 3,200 tweets from any public user’s timeline. There’s a slight hitch though; retweets are included in that 3,200 count. This means that for prolific retweeters, we can only go back a few months, since that 3,200 quota is immediately filled.</p>
+<p>Here’s a histogram showing <em>all</em> tweets over time, including retweets.
+<img src="{{< blogdown/postref >}}index.en_files/figure-html/Plot%20unfiltered%20histogram-1.png" width="672" /></p>
+<p>Two users that immediately stand out through the sheer number of their tweets are Joseph Muscat and Jason Azzopardi. In both these cases, the 3,200 limit means we only get data from around May onward for both these users.</p>
+<p>The President, Simon Busuttil, Kurt Farrugia, Chris Fearne and Clyde Puli all have a base level of Twitter usage. Konrad Mizzi, and more surprisingly, Adrian Delia, seem to not use Twitter much. Clyde Puli also seems to be tweeting less in the last year or so compared to before.</p>
+<p>From this point on, we’ll use a filtered version of the dataset that excludes retweets and only looks at what the politicians themselves (or their staff) are writing. Here’s what that histogram looks like:
+<img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+</div>
+</div>
+<div id="who-has-the-largest-number-of-followers" class="section level1">
+<h1>Who has the largest number of followers?</h1>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Followers-1.png" width="672" /></p>
+</div>
+<div id="whose-tweets-are-the-longest" class="section level1">
+<h1>Whose Tweets are the longest?</h1>
+<p>What’s the average word count of our users’s tweets?</p>
+<pre><code>## # A tibble: 9 x 2
+##   screen_name     Average_Word_Count
+##   &lt;chr&gt;                        &lt;dbl&gt;
+## 1 AzzopardiJason                26.8
+## 2 JosephMuscat_JM               23  
+## 3 adriandeliapn                 22  
+## 4 KurtFarrugia                  20.7
+## 5 SimonBusuttil                 20.3
+## 6 presidentMT                   18  
+## 7 KonradMizzi                   17.4
+## 8 chrisfearne                   12.2
+## 9 ClydePuli                     11.6</code></pre>
+<p>Most users manage an average of around 20 words per tweet. The average Jason Azzopardi or Joseph Muscat tweet is a bit longer, the average Clyde Puli or Chris Fearne tweet a bit shorter.</p>
+<p>Here’s what that distribution would look like as boxplots, with the thick middle line denoting the median, the coloured bars to either side of it showing the middle 50% of the data. The spread of the data shows that Joseph Muscat, Jason Azzopardi, and Adrian Delia’s word count in tweets is highly variable. For the other users, except the odd outlier (represented by the dots), not so much.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Boxplots-1.png" width="672" /></p>
+</div>
+<div id="favourites-and-retweets" class="section level1">
+<h1>Favourites and Retweets</h1>
+<p>So far we know that Joseph Muscat and Jason Azzopardi are the most prolific twitter users when looking at volume. But how well do they engage their respective audiences?</p>
+<p>One measure of how widely the message is disseminated is how much times a tweet has been favourited or retweeted.</p>
+<p>Again, Joseph Muscat is the most succesful user in terms of getting his message across, with his tweets being favourited 97 times and retweeted 40 times on average. This is nearly double of what the runner up, and his direct competitor, Adrian Delia manages.</p>
+<p>Other Twitter users who seem to succesfully get their message across include Chris Fearne, Konrad Mizzi, Kurt Farrugia and Simon Busuttil. The violin graphs below show the density of the distribution. Taking Simon Busuttil’s retweets as an example, we can see that the majority of his tweets has less than 100 retweets. A large portion of that had even less than 50, but one or two tweets had over 450 retweets.</p>
+<pre><code>## # A tibble: 9 x 3
+##   screen_name     avg_faves avg_rts
+##   &lt;chr&gt;               &lt;dbl&gt;   &lt;dbl&gt;
+## 1 adriandeliapn      30.3    19.2  
+## 2 AzzopardiJason      7.57    1.41 
+## 3 chrisfearne        18.3     6.87 
+## 4 ClydePuli           0.784   0.547
+## 5 JosephMuscat_JM    96.8    40.7  
+## 6 KonradMizzi        22.0    11.6  
+## 7 KurtFarrugia       18.3    11.1  
+## 8 presidentMT         7.44    3.15 
+## 9 SimonBusuttil      24.4    13.9</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Violin%20Plots-1.png" width="672" /><img src="{{< blogdown/postref >}}index.en_files/figure-html/Violin%20Plots-2.png" width="672" /></p>
+<p>As a side note, while creating these graphs, I realised that they looked more or less the same. And indeed, when you plot out the relationship between the number of retweets and favourites for each tweet, it’s linear. This makes sense, as to an extent, these two things are measuring the same phenomenon: popularity of the tweet.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+</div>
+<div id="word-frequencies" class="section level1">
+<h1>Word Frequencies</h1>
+<p>So what are individual users more likely to tweet? Again, by using the <em>tidytext</em> package, which features a twitter tokenizer, we can find out. <a href="https://www.tidytextmining.com/twitter.html#word-frequencies-1">I’ve been fascinated by the simple elegance of plotting frequency on scatter plots from the moment I saw them in Julia Silge and David Robinson’s book, so this will be a shameless copy.</a></p>
+<p>The principle is this: words that are equally likely to be used by both users will be near the center blue diagonal line. Words that one user prefers more than another will be off to the side. The units of the axis are percent of frequency. So a word with 1% frequency will mean that out of a hundred words in every tweet, that user is likely to use it once. That probably says a great deal about the level of information condensation in tweets. Lets start with the most logical comparison.</p>
+<div id="what-joseph-muscat-tweets-vs.-what-adrian-delia-tweets" class="section level3">
+<h3>What Joseph Muscat Tweets vs. What Adrian Delia Tweets</h3>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>Over 3% of Muscat’s tweets contain ‘#malta’. He’s also more likely to tweet about Europe (‘<span class="citation">@EUCommission</span>’, ‘<span class="citation">@junkereu</span>’, ‘#eu’, ‘european’) and, well, use usual politican words like ‘#health’, ‘community’, ‘persons’, ‘family’, ‘economy’ etc.</p>
+<p>Delia is more likely to tweet to <span class="citation">@simonbusuttil</span>, mention ‘ag’, ‘inquiry’, or ‘women’, and more prone to use ‘people’ as opposed to Muscat’s ‘persons’.</p>
+</div>
+<div id="how-simon-busuttil-compares-to-both-of-them" class="section level3">
+<h3>How Simon Busuttil Compares to both of them</h3>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-1.png" width="672" /><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-5-2.png" width="672" /></p>
+<p>Simon Busuttil tweets overwhelmingly about ‘#panamapapers’, ‘corruption’, the Pilatus Bank affair, and ‘#egrant’ compared to <em>both</em> Joseph Muscat <em>and</em> Adrian Delia.</p>
+</div>
+<div id="what-is-the-cabinetshadow-cabinet-up-to" class="section level3">
+<h3>What is the Cabinet/Shadow Cabinet up to?</h3>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-2.png" width="672" /></p>
+<p>Chris Fearne tweets predominantly about health, his current Ministerial responsibility, and Korad Mizzi tweeted more about Energy, his past Ministerial responsibility. This means that they both use Twitter to highlight important milestones in their electoral pledges.</p>
+</div>
+<div id="presedential-tweets-versus-prime-ministerial-tweets" class="section level3">
+<h3>Presedential Tweets versus Prime Ministerial Tweets</h3>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
+<p>What differentiates a Prime Ministerial tweet from a Presidential one? Both the Prime Minister and the President are equally likely to use the words ‘#gozo’, ‘equity’, ‘families’ and ‘european’.</p>
+<p>The only things the President is more likely to tweet about are ‘gender’, ‘children’ and ‘rights’.</p>
+</div>
+<div id="jason-azzopardi-vs.-kurt-farrugia" class="section level3">
+<h3>Jason Azzopardi vs. Kurt Farrugia</h3>
+<p>This was an interesting comparison, since these two users have a similar, more offensive, twitter style.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>In fact, a sizeable portion of both Jason Azzopardi and Kurt Farrugia’s tweets are spent replying to other users, or at least, trying to rope them in.</p>
+<p>For Jason Azzopardi these include European Commissioner for Justice Vera Jourova, local newspaper the Malta Independent, MEP Ana Gomes who is part of the European Parliament’s Ad Hoc Mission on the Rule of Law in Malta and local blogger Manuel Delia.</p>
+<p>Kurt Farrugia often ropes in his boss Joseph Muscat and ‘<span class="citation">@maltagov</span>’, but is equally likely to confront Simon Busuttil or ‘<span class="citation">@pnmalta</span>’. Kurt Farrugia is also the only government user we’ve examined to directly reply or try to challenge allegations by activists on twitter <a href="%5Bhttps://twitter.com/bugdavem.">like the anonymous account ‘BugM’</a> How he does this is also apparent: using words like ‘lie’, ‘false’ or ‘truth’.</p>
+<p>Perhaphs most fascinating is how equally likely both of these users are to tweet to Times of Malta journalists Ivan Camilleri and Jacob Borg, demonstrating just how skillful both of these users are (or at least how hard they try) at trying to peddle their side’s respective narratives to the media.</p>
+</div>
+</div>
+<div id="sentiment-of-tweets" class="section level1">
+<h1>Sentiment of Tweets</h1>
+<p>Using a similar procedure as <a href="https://www.charlesmercieca.com/post/text-mining-local-news-part-1/">the one detailed in my article examining local news articles</a>, we can quantify and visualise how much positive or negative sentiment a tweet has.</p>
+<p>Here is what the mean sentiment score of every tweet in 2018 looks like, using the AFINN sentiment lexicon, with each dot being a tweet, and the light grey line being a perfectly neutral tweet.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p>A few things readily stand out:</p>
+<ul>
+<li>Chris Fearne, Joseph Muscat, Konrad Mizzi and the President have, generally, many more positive tweets than negative ones.</li>
+<li>Adrian Delia and Kurt Farrugia adopt a balancing act, being negative and positive in equal proportions.</li>
+<li>Simon Busuttil and Jason Azzopardi are more lopsided towards negative tweets than positive ones.</li>
+</ul>
+<p>And here’s what the polarity scores per user look like after passing all the tweet test through the <em>QDAP</em> package’s polarity function. Any dot left of the vertical line passing through a polarity of 0 means that the average polarity of that user is negative, and, likewise, anything right is positive.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/Loading%20&%20Using%20Polarity%20Objects-1.png" width="672" /></p>
+<p>Now to be clear, the job of opposition figures is to criticise, while that of individuals in government is to promote their work, so the results are hardly surprising… save for two things. Adrian Delia’s relatively ‘positive’ rating, and Kurt Farrugia’s relatively ‘negative’ one. So what gives?</p>
+<p>I think what’s happening is fascinating. From the analysis of word frequencies, we know that Kurt Farrugia’s is quick to intercept criticism and heckling in an attempt to counterbalance. This is despite the fact that most of these tweets set out to target Joseph Muscat’s account. Kurt Farrugia’s twitter presence allows Joseph Muscat’s account to not engage in these discussions himself directly. Instead, Muscat tweets about the successes and achievements of his government, giving him lopsidedly positive tweets.</p>
+<p>Similarly, Adrian Delia’s twitter presence is the most sombre of all the PN associated accounts we’ve looked at. He to, appears, to be more than willing to allocate the trench warfare to his deputies.</p>
+</div>
+<div id="before-this-gets-too-long" class="section level1">
+<h1>Before this gets too long…</h1>
+<div id="what-weve-learned" class="section level2">
+<h2>What we’ve learned</h2>
+<ul>
+<li>Joseph Muscat and Jason Azzopardi are the two most prolific twitter users we looked at.</li>
+<li>Jason Azzopardi has the longest tweets on average.</li>
+<li>Joseph Muscat’s account is three times more popular than the runner up, the President.</li>
+<li>Joseph Muscat’s account is also the most succesful in terms of getting retweets/tweet favourites.</li>
+<li>Simon Busuttil tweets predominantly about ‘#panamapapers’, ‘corruption’, the Pilatus Bank affair, and ‘#egrant’.</li>
+<li>Chris Fearne tweets mostly about health.</li>
+<li>Konrad Mizzi tweets mostly about energy.</li>
+<li>Kurt Farrugia’s twitter presence is highly strategic, and a lynchpin of the “pożittività” mantra.</li>
+</ul>
+</div>
+<div id="what-ill-look-at-in-a-second-post" class="section level2">
+<h2>What I’ll look at in a second post</h2>
+<ul>
+<li>Try to visualise the twitter network of these 9 users.</li>
+<li>Other tidbits that didn’t make this cut.</li>
+</ul>
+</div>
+</div>
