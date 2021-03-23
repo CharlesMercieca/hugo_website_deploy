@@ -2,7 +2,7 @@
 title: "Text Mining Historical Mass Meeting Speeches"
 author: ''
 date: '2021-03-22'
-slug: 'historical-mass-meeting-speeches'
+slug: historical-mass-meeting-speeches
 categories: []
 tags: []
 type: ''
@@ -177,7 +177,7 @@ tf_idf %>%
   labs(title = "Top tf-idf terms by speech")
 ```
 
-The results are actually quite fun. Mintoff's speech on the 14th of January gleams "xebba", "kmandamenti" and "itiru" as noteworthy. If you're wondering what he did with that, his speech was against the Catholic Church's interdiction of his party that had just happened the previous year. The "xebba" was Joan or Arc, who Mintoff said was burned at the stake because she stepped on the toes of some bishops.
+The results are actually quite fun. On Mintoff's speech on the 14th of January, "xebba", "kmandamenti" and "itiru" stand out as noteworthy. If you're wondering what he did with that, his speech was against the Catholic Church's interdiction of his party that had just happened the previous year. The "xebba" was Joan or Arc, who Mintoff said was burned at the stake because she stepped on the toes of some bishops.
 
 The other two are too hilarious not to reproduce here.
 
@@ -191,7 +191,7 @@ The final Mintoff speech is about internal fiscal policy, where he accuses the B
 
 Fenech Adami's first speech is a few days after the murder of Raymond Caruana, so those events are discussed, together with a pledge against corruption and for justice.
 
-His second speech was in Gozo, so obviously "Ghawdxi" peaks. "Kampanja" is a reference to the electoral campaign, which Fenech Adami said was in full swing, to deliver a government that would create equal opportunities for work for all.
+His second speech was in Gozo, and "Ghawdxi" peaks. "Kampanja" is a reference to the electoral campaign, which Fenech Adami said was in full swing, to deliver a government that would create equal opportunities for work for all.
 
 We also see a quirk developing in Fenech Adami's second and third speeches: his fondness for the word "verament".
 
@@ -236,6 +236,23 @@ ggplot(frequency, aes(`Fenech Adami`, Mintoff)) +
   geom_abline(color = "red")+
   theme_bw()+
   labs(title = "Word Frequency across Political Speeches")
+```
+
+## Speech Length
+
+Fenech Adami's speeches are also much more variable in length - he has both the longest (8,351) and shortest (1,837) speeches in the corpus. Mintoff's are consistently around the 4,000 word mark.
+
+```{r}
+speeches_tidied_tokens %>% 
+  group_by(speech, speaker) %>% 
+  summarise(sum(n)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = speaker, y = `sum(n)`, fill = speaker))+
+  geom_violin()+
+  theme_bw()+
+  ylab("Words")+
+  xlab("")
+
 ```
 
 ## Topic Modeling

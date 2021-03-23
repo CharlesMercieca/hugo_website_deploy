@@ -2,7 +2,7 @@
 title: "Text Mining Historical Mass Meeting Speeches"
 author: ''
 date: '2021-03-22'
-slug: 'historical-mass-meeting-speeches'
+slug: historical-mass-meeting-speeches
 categories: []
 tags: []
 type: ''
@@ -163,7 +163,7 @@ tf_idf %&gt;%
   theme(legend.position=&quot;bottom&quot;)+
   labs(title = &quot;Top tf-idf terms by speech&quot;)</code></pre>
 <p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-7-1.png" width="672" /></p>
-<p>The results are actually quite fun. Mintoff’s speech on the 14th of January gleams “xebba”, “kmandamenti” and “itiru” as noteworthy. If you’re wondering what he did with that, his speech was against the Catholic Church’s interdiction of his party that had just happened the previous year. The “xebba” was Joan or Arc, who Mintoff said was burned at the stake because she stepped on the toes of some bishops.</p>
+<p>The results are actually quite fun. On Mintoff’s speech on the 14th of January, “xebba”, “kmandamenti” and “itiru” stand out as noteworthy. If you’re wondering what he did with that, his speech was against the Catholic Church’s interdiction of his party that had just happened the previous year. The “xebba” was Joan or Arc, who Mintoff said was burned at the stake because she stepped on the toes of some bishops.</p>
 <p>The other two are too hilarious not to reproduce here.</p>
 <blockquote>
 <p>3,000 sena ilu, Mosè niżel mill-muntanja b’żewġ tabelli tal-irħam, u qal lill-poplu Lhudi: Dawn huma l-kmandamenti t’Alla. U kienu 10 kmandamenti t’Alla. U ilhom dawn il-kmandamenti 3,000 sena, u l-insara kollha tad-dinja jqimuhom dawn u jibqgħu jqimuhom dawn l-10 kmandamenti t’Alla. X’għamlu n-nies ta’ żminijietna? Ma’ dawn l-għaxar kmandamenti llum, żiedu l-ħdax u qalu: min jaqra l-Ħelsien jagħmel dnub. Żiedu t-tnax u qalu: min ibigħ il-Ħelsien jagħmel dnub mejjet. Żiedu t-tlettax u qalu: min iqassam il-Ħelsien jagħmel dnub mejjet, bit-2/6. Żiedu l-erbatax: min imur il-meetings Laburisti jagħmel dnub mejjet. U minn issa sakemm tiġi l-elezzjoni min jaf kemm għad iridu jżidu l-kmandamenti. U aħna ngħidulu lil dawn: U dana mhux Mosè żiedhom dawn il-kmandamenti minn fuq il-muntanja bl-ordni t’Alla, dawn waħħluhom xi erba’ qtates kontra tagħna, dawn il-kmandamenti.</p>
@@ -174,7 +174,7 @@ tf_idf %&gt;%
 <p>The two speeches later in January continue on the religious issue, but we also see “dominion” pop up, in reference to Mintoff’s foreign policy plan of attempting to integrate Malta within the broader UK as a “dominion”. The sole speech in February mostly concerns the visit to Communist International congress, while March’s speech is a reply to a pastoral letter by the archbishop inviting Labour supporters back into the Church as “prodigal sons”, which as you can imagine was received swimmingly.</p>
 <p>The final Mintoff speech is about internal fiscal policy, where he accuses the Borg Olivier government of driving the nation several thousands of “liri” into debt.</p>
 <p>Fenech Adami’s first speech is a few days after the murder of Raymond Caruana, so those events are discussed, together with a pledge against corruption and for justice.</p>
-<p>His second speech was in Gozo, so obviously “Ghawdxi” peaks. “Kampanja” is a reference to the electoral campaign, which Fenech Adami said was in full swing, to deliver a government that would create equal opportunities for work for all.</p>
+<p>His second speech was in Gozo, and “Ghawdxi” peaks. “Kampanja” is a reference to the electoral campaign, which Fenech Adami said was in full swing, to deliver a government that would create equal opportunities for work for all.</p>
 <p>We also see a quirk developing in Fenech Adami’s second and third speeches: his fondness for the word “verament”.</p>
 <p>The “fabrika” term also seems to have a humorous story:</p>
 <blockquote>
@@ -190,6 +190,21 @@ tf_idf %&gt;%
 <p>Words clustered in the top left area are generally unique to Mintoff mass meetings, while words clustered on the bottom right are unique to Fenech Adami mass meetings.</p>
 <p>1947 and 1955 seem to be references to those respective general elections.</p>
 <p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+</div>
+<div id="speech-length" class="section level2">
+<h2>Speech Length</h2>
+<p>Fenech Adami’s speeches are also much more variable in length - he has both the longest (8,351) and shortest (1,837) speeches in the corpus. Mintoff’s are consistently around the 4,000 word mark.</p>
+<pre class="r"><code>speeches_tidied_tokens %&gt;% 
+  group_by(speech, speaker) %&gt;% 
+  summarise(sum(n)) %&gt;% 
+  ungroup() %&gt;% 
+  ggplot(aes(x = speaker, y = `sum(n)`, fill = speaker))+
+  geom_violin()+
+  theme_bw()+
+  ylab(&quot;Words&quot;)+
+  xlab(&quot;&quot;)</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;speech&#39;. You can override using the `.groups` argument.</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
 </div>
 <div id="topic-modeling" class="section level2">
 <h2>Topic Modeling</h2>
@@ -220,7 +235,7 @@ top_terms %&gt;%
   facet_wrap(~ topic, scales = &quot;free&quot;) +
   scale_y_reordered()+
   labs(title = &quot;Inferred Topic&quot;)</code></pre>
-<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-9-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
 <p>With that, we can then rename the clusters with what we infer from them:</p>
 <pre class="r"><code>topic_labels &lt;- tibble(topic = c(1:9), 
                        label = c(&quot;PN Pledges&quot;,
@@ -262,5 +277,5 @@ gamma %&gt;%
   theme(legend.position = &quot;none&quot;)+
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())</code></pre>
-<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-11-1.png" width="672" /></p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-12-1.png" width="672" /></p>
 </div>
