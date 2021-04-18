@@ -200,13 +200,16 @@ candidates <- elections %>%
 
 We can pipe this into an interactive HTML table using the `DT` package:
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(DT)
+library(widgetframe)
 
 table <- datatable(candidates, filter = 'top', options = list(
   pageLength = 24, autoWidth = TRUE))
-table
+
+widgetframe::frameWidget(table)
 ```
+
 
 Or alternatively:
 

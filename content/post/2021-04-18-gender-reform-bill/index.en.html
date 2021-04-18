@@ -1,0 +1,229 @@
+---
+title: "Who would have been elected if we had the gender reform bill in the past?"
+author: ''
+date: '2021-04-18'
+slug: gender-reform-bill
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+<script src="{{< blogdown/postref >}}index.en_files/htmlwidgets/htmlwidgets.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/pymjs/pym.v1.js"></script>
+<script src="{{< blogdown/postref >}}index.en_files/widgetframe-binding/widgetframe.js"></script>
+
+
+<p>With Parliament’s Gender Quota bill <a href="https://timesofmalta.com/articles/view/more-women-in-parliament-as-house-approves-bill-on-gender-parity.864786">passing it’s third reading</a>, it’s only a President’s signature away from becoming law. Whether the mechanism has the desired effect or not can only be assessed in the future following a few Parliamentary cycles.</p>
+<p>What we can do is play around with data and entertain what some previous Parliaments might have of looked like had these rules already been in place. This sort of <a href="https://en.wikipedia.org/wiki/Backtesting">backtesting</a> is quite common in some domains, so adopting it to policy decisions shouldn’t be that much of a leap.</p>
+<div id="how-does-the-gender-quota-bill-work" class="section level2">
+<h2>How does the Gender Quota Bill work?</h2>
+<p>The best explainer I could find on how the reform will work is <a href="https://meae.gov.mt/en/Public_Consultations/OPM/Documents/FINAL%20-%20CONSULTATION%20DOCUMENT%20-%20WEB%20VERSION.pdf">from this public consultation document dated from March 2019.</a> I’m not sure if the final version passed in Parliament is exactly identical.</p>
+<p>In any case, the gist is in pages 41 to 47, where the process is proposed as:</p>
+<ol style="list-style-type: decimal">
+<li><p>Allow the usual election counting, constitutional adjustment and casual elections to take place as they currently do.</p></li>
+<li><p>If two parties make it to parliament, calculate the proportion of MP’s by gender.</p></li>
+<li><p>If one gender has less than 40% of the seats, trigger the clause.</p></li>
+<li><p>Calculate the number of seats needed by the underrepresented gender to reach the 40% quota. Although the required seats to reach 40% might be more than 12, the maximum number of seats allocated can be 12, equally split between the parties.</p></li>
+<li><p>Fill these seats using a ranked list that prioritizes candidates of the under-represented gender who suffered from “wasted” votes in their district. This is a bit more complex than one assumes at first, since two ways are proposed. The first is rank by left over votes that can’t be transferred once 5 MP’s are elected from a district - this seems straight forward. The second entails using the leftover votes of the over-represented gender and holding “casual” elections transferring these votes to the under-represented gender. We can’t do this using the summarized data.</p></li>
+<li><p>If this list is exhausted, and seats remain available, parties can co-opt their choices.</p></li>
+</ol>
+</div>
+<div id="the-data" class="section level2">
+<h2>The Data</h2>
+<p>Like in other projects, we’ll use the <a href="https://www.um.edu.mt/projects/maltaelections/elections/parliamentary">Malta Elections dataset</a> originally started by Professor John C. Lane and currently hosted by the University of Malta. The data here spans from 1921 to 2013, allowing us to simulate all but the last legislature.</p>
+</div>
+<div id="step-1-find-in-which-legislatures-the-mechanism-is-applicable" class="section level2">
+<h2>Step 1: Find in which Legislatures the Mechanism is applicable</h2>
+<p>For a legislature to be applicable it needs to have a gender imbalance of 60% and consist of only two parties. We can calculate those as follows:</p>
+<pre class="r"><code>library(readxl)
+library(tidyverse)
+
+elections &lt;- read_excel(&quot;C:/Users/Charles Mercieca/Documents/RProjects/Parliament Gender Reform/Input/elections.xls&quot;)
+
+prop_women &lt;- elections %&gt;% 
+  filter(SEATED != 0,
+         PARTY != 99) %&gt;% 
+  mutate(SEX = SEX-1) %&gt;% 
+  group_by(election = YEAR) %&gt;% 
+  summarise(proportion_women = mean(SEX))
+
+parties &lt;- elections %&gt;%
+  filter(WIN != 0,
+         PARTY != 99) %&gt;% 
+  group_by(YEAR) %&gt;% 
+  distinct(PARTY) %&gt;% 
+  group_by(election = YEAR) %&gt;% 
+  tally(name = &quot;Parties Elected to Parliament&quot;)
+
+legislatures &lt;- prop_women %&gt;% 
+  inner_join(parties) %&gt;% 
+  mutate(activate_mechanism = proportion_women &lt; 0.4 &amp;
+           `Parties Elected to Parliament` == 2)
+
+legislatures %&gt;% tail(10)</code></pre>
+<pre><code>## # A tibble: 10 x 4
+##    election proportion_women `Parties Elected to Parliament` activate_mechanism
+##       &lt;dbl&gt;            &lt;dbl&gt;                           &lt;int&gt; &lt;lgl&gt;             
+##  1     1971           0.0357                               2 TRUE              
+##  2     1976           0.0429                               2 TRUE              
+##  3     1981           0.0290                               2 TRUE              
+##  4     1987           0.0278                               2 TRUE              
+##  5     1992           0.0145                               2 TRUE              
+##  6     1996           0.0571                               2 TRUE              
+##  7     1998           0.0909                               2 TRUE              
+##  8     2003           0.0870                               2 TRUE              
+##  9     2008           0.0870                               2 TRUE              
+## 10     2013           0.130                                2 TRUE</code></pre>
+<p>The first condition always has been true for every General Election so far. Since women’s suffrage was only established in time for 1947 election, and before that no women contested, 6 legislatures spanning 1921-1945 are out.</p>
+<p>The 1951, 1953 and 1962 elections also resulted in more than 2 parties being elected, which leaves us with 11 elections to play with.</p>
+<pre class="r"><code>ggplot(legislatures, aes(x = election, y = proportion_women))+
+geom_line()+
+geom_point(aes(col = activate_mechanism))+
+scale_y_continuous(labels = scales::percent)+
+  theme_light()</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+</div>
+<div id="step-2-calculate-additional-seats" class="section level2">
+<h2>Step 2: Calculate Additional Seats</h2>
+<p>Slightly more involved is how to calculate the additional seats, which I’ve implemented in a function below following the maths from page 43 of the document.</p>
+<pre class="r"><code>additional_seats &lt;- function(gender_under, gender_over){
+  #Calculate extra seats to be added to Parliament
+  additional_seats &lt;- ((0.4 * gender_over) - gender_under) /
+    0.6
+  
+  #Check to see that MP&#39;s remain an odd number and round down if not
+  if (floor(additional_seats)+(gender_under+gender_over) / 2){
+    floor(additional_seats) - 1
+  }
+  
+  else {
+    floor(additional_seats)
+  }
+}</code></pre>
+<p>The document also has two fictional scenarios with which we can test our function.</p>
+<pre class="r"><code>#Scenario 1: &quot;the under-represented sex secured nine seats from a total of 67&quot;...&quot;x = 29.67 which is rounded down to 28&quot;
+
+additional_seats(9, 67) == 28</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<pre class="r"><code>#Scenario 2: &quot;If the under-represented sex obtained 23 seats from a total of 69 seats, the total number of additional seats assigned to this under-represented group is 6&quot;
+additional_seats(23, 69) == 6</code></pre>
+<pre><code>## [1] TRUE</code></pre>
+<p>Now we need to parse out how many men and women were elected or seated in casual elections throughout the legislatures, and then apply our function, accounting for the fact that if the maximum number of additional seats is limited to 12.</p>
+<pre class="r"><code>eligible_years &lt;- legislatures %&gt;% 
+  filter(activate_mechanism == T,
+         election &gt;= 1947) %&gt;% 
+  pull(election)
+
+seats &lt;- elections %&gt;% 
+  filter(YEAR %in% eligible_years,
+         SEATED != 0,
+         PARTY != 99) %&gt;%
+  group_by(YEAR, SEX) %&gt;% 
+  tally() %&gt;% 
+  pivot_wider(names_from = SEX, values_from = n) %&gt;% 
+  rename(men = &quot;1&quot;, women = &quot;2&quot;) %&gt;% 
+  mutate(calculated_seats = additional_seats(women, men),
+         adjusted_seats = if_else(calculated_seats &gt; 12, 
+                                  12, 
+                                  calculated_seats))
+seats</code></pre>
+<pre><code>## # A tibble: 12 x 5
+## # Groups:   YEAR [12]
+##     YEAR   men women calculated_seats adjusted_seats
+##    &lt;dbl&gt; &lt;int&gt; &lt;int&gt;            &lt;dbl&gt;          &lt;dbl&gt;
+##  1  1955    42     1               25             12
+##  2  1966    49     2               28             12
+##  3  1971    54     2               31             12
+##  4  1976    67     3               38             12
+##  5  1981    67     2               40             12
+##  6  1987    70     2               42             12
+##  7  1992    68     1               42             12
+##  8  1996    66     4               36             12
+##  9  1998    60     6               29             12
+## 10  2003    63     6               31             12
+## 11  2008    63     6               31             12
+## 12  2013    60     9               24             12</code></pre>
+</div>
+<div id="step-3-compile-list" class="section level2">
+<h2>Step 3: Compile List</h2>
+<p>Now we need a fair way to fill those 12 seats. I did struggle to understand all the gist of the documentation here, but my understanding is the safest bets are “hanging” candidates of the minority gender.</p>
+<p>It’s actually pretty trivial to calculated the “wasted” votes from our dataset, we just need to find candidates whose maximum count was equivalent to their last count like this:</p>
+<pre class="r"><code>wasted_votes &lt;- elections %&gt;% 
+  filter(YEAR %in% eligible_years,
+         SEATED == 0,
+         TOPS == LAST,
+         PARTY != 99)
+
+w &lt;- wasted_votes %&gt;% 
+  group_by(YEAR, Dist) %&gt;% 
+  summarise(max(LAST))</code></pre>
+<pre><code>## `summarise()` has grouped output by &#39;YEAR&#39;. You can override using the `.groups` argument.</code></pre>
+<p>From here I thought it was fairly straightforward: find these candidates, filter for the ones that are women and we’d have most of the list. But it turns out that only three of those candidates with wasted votes are women.</p>
+<pre class="r"><code>wasted_votes %&gt;% 
+  filter(SEX == 2) %&gt;% 
+  select(YEAR, NAME, Dist)</code></pre>
+<pre><code>## # A tibble: 3 x 3
+##    YEAR NAME           Dist
+##   &lt;dbl&gt; &lt;chr&gt;         &lt;dbl&gt;
+## 1  2003 Law, Rita         2
+## 2  2008 Dalli, Helena     3
+## 3  2008 Law, Rita         3</code></pre>
+<p>Which is probably why the document mentions that vote transferring mechanism. But given the document doesn’t delve too deeply into the details here and reverse engineering transfers might be too bold of an undertaking for a weekend project, the below is a rough approximation using the highest votes a candidate saw (i.e. the <code>TOPS</code> variable).</p>
+<p>For the 1st elected candidate in a district, this will be the first count, for the 2nd elected the second and so on. Since by default the candidates we’re looking into were not elected, higher <code>TOPS</code> counts indicate a higher preference to transfer votes to that candidate.</p>
+<pre class="r"><code>#Create filter list for candidates elected in other districts in same year (e.g. Claudette Buttigieg in 2013)
+
+elected_seperately &lt;- elections %&gt;% 
+  filter(SEATED != 0) %&gt;% 
+  distinct(YEAR, NAME)
+
+#Select best performing women among non-elected candidates nation wide
+candidates &lt;- elections %&gt;% 
+  filter(YEAR %in% eligible_years,
+         SEATED == 0, #Filter out elects, including adjustment and casual elec.
+         PARTY %in% c(13, 15), #PN &amp; PL
+         SEX == 2) %&gt;%  #Women
+  mutate(PARTY = case_when(PARTY == &quot;13&quot; ~ &quot;PL&quot;,
+                           PARTY == &quot;15&quot; ~ &quot;PN&quot;)) %&gt;%
+  anti_join(elected_seperately) %&gt;% 
+  select(YEAR, NAME, PARTY, Dist, CT1, TOPS) %&gt;% 
+  group_by(YEAR, PARTY, Dist) %&gt;% 
+  arrange(YEAR, PARTY, desc(TOPS)) %&gt;% 
+  group_by(YEAR, PARTY) %&gt;% 
+  slice(1:6) %&gt;% 
+  mutate(YEAR = as.factor(YEAR),
+         PARTY = as.factor(PARTY)) %&gt;% 
+  arrange(desc(YEAR))</code></pre>
+<pre><code>## Joining, by = c(&quot;NAME&quot;, &quot;YEAR&quot;)</code></pre>
+<p>We can pipe this into an interactive HTML table using the <code>DT</code> package:</p>
+<pre class="r"><code>library(DT)
+library(widgetframe)
+
+table &lt;- datatable(candidates, filter = &#39;top&#39;, options = list(
+  pageLength = 24, autoWidth = TRUE))
+
+widgetframe::frameWidget(table)</code></pre>
+<div id="htmlwidget-1" style="width:100%;height:480px;" class="widgetframe html-widget"></div>
+<script type="application/json" data-for="htmlwidget-1">{"x":{"url":"index.en_files/figure-html//widgets/widget_unnamed-chunk-9.html","options":{"xdomain":"*","allowfullscreen":false,"lazyload":false}},"evals":[],"jsHooks":[]}</script>
+<p>Or alternatively:</p>
+<pre class="r"><code>ggplot(candidates, aes(fct_reorder(NAME, TOPS), TOPS, fill = PARTY))+
+  geom_col()+
+  coord_flip()+
+  facet_wrap(~YEAR, 
+             scales = &quot;free&quot;, 
+             ncol = 2)+
+  ylab(&quot;Highest Vote Count Candidate Achieved Before Transfer&quot;)+
+  xlab(&quot;&quot;)+
+  theme_light()+
+  theme(legend.position=&quot;top&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-10-1.png" width="672" /></p>
+<p>We stumble into two areas of added complexity here:</p>
+<ol style="list-style-type: decimal">
+<li><p>Sometimes the adjustment downward to ensure an odd overall parliament will result in an odd list (i.e. 11 candidates) How would this be split among the two parties?</p></li>
+<li><p>Well performing candidates perform well in multiple districts. Taking 2013 as an example, Yana Bland Mintoff, Rita Law and Joanne Vella Cuschieri all did well in two districts (hence we captured them twice). In some cases it would probably entail having casual elections of casual elections using the results of casual elections, which are several orders of abstractions above the result on election day.</p></li>
+</ol>
+<p>Interestingly, a number of politicians that would have of made it to Parliament are those that did eventually make it in future years: Therese Comodini Cachia in 2013 (elected in 2017), Paula Mifsud Bonnici and Marthese Portelli in 2008 (both elected in 2013), Marlene Farrugia in 1998 and Helena Dalli in 1992 (subsequently elected in 1996).</p>
+<p>Another noteworthy instance is in the case of Rita Law, where the mechanism would mean that someone who made it to Parliament in 1998 but subsequently did not despite relatively solid performances would have of returned to the MP benches.</p>
+<p>As an aside, one of the 1955 candidates that would have of made it is Cecilia Strickland, sister of Mabel and daughter of Gerald, who eventually left Malta and settled in Surrey.</p>
+</div>
