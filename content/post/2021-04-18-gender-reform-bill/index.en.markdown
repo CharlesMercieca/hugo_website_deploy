@@ -272,8 +272,9 @@ We can pipe this into an interactive HTML table using the `DT` package:
 ``` r
 library(DT)
 
-datatable(candidates, filter = 'top', options = list(
+table <- datatable(candidates, filter = 'top', options = list(
   pageLength = 24, autoWidth = TRUE))
+table
 ```
 
 <div id="htmlwidget-1" style="width:100%;height:auto;" class="datatables html-widget"></div>
