@@ -1,0 +1,104 @@
+---
+title: "Tracking Frontex's Newest UAV"
+author: ''
+date: '2021-05-10'
+slug: tracking-frontexs-newest-uav
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="this-is-a-high-level-article-on-the-uav-operations.-if-you-want-more-background-on-how-i-load-and-store-the-data-head-here." class="section level4">
+<h4>This is a high level article on the UAV operations. If you want more background on how I load and store the data, <a href="https://www.charlesmercieca.com/post/building-a-pipeline/">head here.</a></h4>
+<p>Reports in a number of portals including <a href="https://timesofmalta.com/articles/view/eu-border-agency-frontex-to-deploy-drone-from-malta-in-100-million.869113">Times of Malta</a> show that an unmanned aerial vehicle has been deployed from Luqa airport. The timing, right ahead of the typically busy summer migration time, seems to be an indication of what the main mission probably is.</p>
+<p>Frontex has been thinking of operating a UAV <a href="https://www.independent.com.mt/articles/2010-03-21/local-news/Frontex-Eyes-drone-planes-for-migrant-searches-271965">for over a decade now</a>, and it seems to have come in the form of an <a href="https://en.wikipedia.org/wiki/IAI_Heron">IAI Heron</a>. “<em>Drone</em>” is a bit of a misnomer for this type of system, since in most people’s heads it’s associated to consumer grade toys like the DJI Phantom.</p>
+<p>The Heron is slightly larger than most small single engine aircraft, with slender and 16 metre long high aspect ratio wings, a 430kg fuel capacity, an engine as powerful as an average family car and needing around half a kilometer of runway for takeoff and landing.</p>
+<p><img src="https://pbs.twimg.com/media/E02tuCbXEAEKj3l?format=jpg&amp;name=large" /></p>
+<p>From photos taken by local spotters, the Heron seems to be carrying Israel Aircraft Industries’ own native <a href="https://www.iai.co.il/p/m19">M19 sensor payload</a> giving the aircraft the ability to track boats even in the dark or through clouds. On paper, the aircraft is almost tailor made for border surveillance applications of the type Frontex engages in, with the ability to loiter at the periphery for close to 50 hours at 30,000 feet.</p>
+<p>IAI quotes the range as 350 kilometers when in radio communication mode with a ground station and 1,000 kilometers when a satellite is used to relay the signal:</p>
+<p><img src="HeronRangemap.gif" /></p>
+<p>The subject as to who does the actual “operating” isn’t so clear however. <a href="https://www.airbus.com/newsroom/press-releases/en/2020/10/european-border-and-coast-guard-agency-frontex-selects-airbus-and-its-partner-iai-for-maritime-aerial-surveillance-with-remotely-piloted-aircraft-systems-rpas.html">This press release by Airbus</a> seems to suggest that they set up the ground infrastructure and fly the aircraft, but the Heron has been given a standard AFM Air Wing <em>ASXXXX</em> registration, with the first two digits indicating the year of registry (2021) and the last two being the cumulative count of the aircraft (23rd aircraft operated by the Air Wing).</p>
+<p>In any case, as soon as the news broke, I began looking into ways to track and visualize how Frontex is using their latest asset. <a href="https://www.charlesmercieca.com/post/building-a-pipeline/">As mentioned in the methods post</a>, all data is gathered from the <a href="https://opensky-network.org/">OpenSky Network ADS-B logs</a>.</p>
+<p>To get a track of all recorded flights, I simply query my SQLite database (again, <a href="https://www.charlesmercieca.com/post/building-a-pipeline/">head to the method’s post for a breakdown of how I did that, if that’s your cup of tea</a>) using <code>DBI</code> ’s <code>dbGetQuery</code> function.</p>
+<p>giscoR is a fun library for EU state mapping, which in this case I use to get a Malta spatial object to add to my plot, before overlaying the flight tracks of the UAV.</p>
+<pre class="r"><code>library(DBI)
+library(tidyverse)
+library(giscoR)
+library(lubridate)
+library(scales)
+
+WD &lt;- &quot;C:/Users/Charles Mercieca/Documents/RProjects/Heron Tracker/Flights&quot;
+mydb &lt;- dbConnect(RSQLite::SQLite(), paste0(WD, &quot;/heron-flights.sqlite&quot;))
+
+tracks &lt;- dbGetQuery(mydb, &#39;Select * FROM tracks&#39;) %&gt;% 
+  mutate(flight = date(as_datetime(flight)))
+
+mt &lt;- gisco_get_countries(resolution = &quot;01&quot;, country = &quot;MLT&quot;)
+
+ggplot() +
+  geom_sf(data = mt)+
+  geom_path(data = tracks, 
+            aes(y=Lat, 
+                x = Lon, 
+                col = factor(flight)))+
+  labs(col = &quot;Day&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>While they are a phenomenal source, the fact that they are not a for-profit mean they don’t have as much coverage as say FlightRadar24, particularly off the North African coast. This is evident in the tracks for the 6th and 7th of May, where coverage stops close to 34.6N. On both these cases, the aircraft spent most of the night flying over the southern Mediterranean close to the Libyan coast.</p>
+<p>Track wise it was also interesting to see the operators slowly expand their safety envelope: for their first flights they lauched the aircraft to the south west and recovered in the opposite direction to the north east: this area over Dingli is largely devoid of any population. But after a few flights, they seemed comfortable to take off from runway 05, over Marsa and Valletta, overfly a bit of Gozo and shoot an approach for runway 13, flying overland most of Malta.</p>
+<p>As part of the ADS-B message, we also get the aircraft’s barometric altitude, which shows us that the Heron hasn’t been flown over 8,000 feet yet, at least while we were intercepting ADS-B logs. It’s typical operating altitude is closer to around 4,000 to 5,000 feet.</p>
+<pre class="r"><code>ggplot(tracks, aes(x = as_datetime(time), y = Alt, col = factor(flight)))+
+  geom_point()+
+  facet_wrap(~flight, scales = &quot;free_x&quot;)+
+  theme_bw()+
+  labs(col = &quot;Day&quot;)+
+  theme(legend.position = &quot;none&quot;)+
+  ylab(&quot;Altitude (feet above Sea Level)&quot;)+
+  xlab(&quot;&quot;)+
+  scale_y_continuous(label=comma)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-2-1.png" width="672" /></p>
+<p>While speed is part of the ADS-B payload, I suspect OpenSky Network truncate it to save space. Nevertheless, we can infer ground speed by calculating the distance between the current latitude/longitude coordinates and the lagged coordinates by 1 step like this:</p>
+<pre class="r"><code>mutate(Lat2 = lag(Lat),
+             Lon2 = lag(Lon),
+             t = difftime(time, lag(time), units = &quot;hours&quot;)) %&gt;%
+      rowwise() %&gt;%
+      mutate(d = geosphere::distHaversine(p1 = c(Lat, Lon), 
+                                          p2 = c(Lat2, Lon2))*0.000539957) %&gt;%
+      ungroup() %&gt;%
+      mutate(knots = d / as.numeric(t))</code></pre>
+<p>the <code>distHaversine</code> function returns the great circle distance between the two pairs in metres, which I then convert to nautical miles by multiplying by 0.000539957.</p>
+<p>Dividing this distance <em>d</em> by the fraction of hours elapsed over the two readings <em>t</em> gives us an inferred ground speed in nautical miles per hour, or knots.</p>
+<pre class="r"><code>tracks %&gt;% 
+  group_by(flight) %&gt;% 
+  mutate(flightTime = cumsum(replace_na(t, 0))) %&gt;% 
+  ggplot(aes(x = flightTime, y = knots, col = factor(flight)))+
+  geom_point()+
+  ylim(c(0,200))+
+  facet_wrap(~flight, scales = &quot;free_x&quot;)+
+  geom_smooth(method = &quot;loess&quot;, se=F, col = &quot;black&quot;)+
+  theme_bw()+
+  ylab(&quot;Inferred Ground Speed (knots)&quot;)+
+  xlab(&quot;Flight Time (hours)&quot;)+
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<pre><code>## `geom_smooth()` using formula &#39;y ~ x&#39;</code></pre>
+<pre><code>## Warning: Removed 31 rows containing non-finite values (stat_smooth).</code></pre>
+<pre><code>## Warning: Removed 29 rows containing missing values (geom_point).</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>For the most part, this approach works well, with an estimated ground speed in the region of 70-100 knots being what you would expect. Exceptionally high values (150+ knots) are mainly due to a quirk of this method in that it measures the shortest possible distance between two points. Over the two recorded time points, the aircraft might have of zig-zagged, circled or flew in a curve.</p>
+<p>Lastly, we can compute a few quick summary statistics. We have the aircraft on record as flying a total of 1,600+ nautical miles</p>
+<pre class="r"><code>tracks %&gt;% 
+  select(d) %&gt;% 
+  sum(na.rm = T)</code></pre>
+<pre><code>## [1] 1689.674</code></pre>
+<p>and</p>
+<pre class="r"><code>tracks %&gt;% 
+  select(t) %&gt;% 
+  sum(na.rm = T)</code></pre>
+<pre><code>## [1] 20.18278</code></pre>
+<p>over 20 hours.</p>
+<p>The ADS-B logs also help tell us a bit about the aircraft origins. The mature serial number (571) hints that the aircraft was manufactured recently, with <a href="https://www.airliners.net/photo/Israel-Aircraft-Industries/Israel-Aircraft-Industries-Heron/2237585?qsp=eJxtjTsOwjAQRO8ytQsCUiS7Iw0lFFxgtV7AUkis9RaJotwdk0hUdKN581nA42Ay2X3OgoAipPyCQyald0FYQElZ6WEdlcR7rPXeux%2B4yCD6HyEc/aFpHMqo1s31IJLJmVmyScTuXzWKfpEU3p6fdad2suht0zi11Y%2Bp5J62DTFKPdb1A/k2Prk%3D">a demonstrator at a 2012 airshow having a 268 serial</a>. But more pertinently, the transponder’s ICAO 24-bit address (A11111) shows two test flights in late March 2021 from Ein Shemer airfield, about 40km south of Haifa, which seems to be where IAI operates the Heron program from. The one month hiatus sounds about right for then disassembling the aircraft into a container, trucking it to Haifa, transporting it by sea and reassembling it.</p>
+<p>The proof of the system’s utility will be in how much more life can be saved in the southern Mediterranean this summer.</p>
+</div>
