@@ -11,7 +11,8 @@ image: ''
 ---
 
 
-#### *This is the "how the sausage is made" post of this subject, detailing how I created a process to save ADS-B data from OpenSky Network into an SQLite database. If you just want to read the article about UAV operations, head here.* 
+
+#### *This is the "how the sausage is made" post of this subject, detailing how I created a process to save ADS-B data from OpenSky Network into an SQLite database. If you just want to read the article about UAV operations, [head here](https://www.charlesmercieca.com/post/tracking-frontexs-newest-uav/).*
 
 ## Step 1: Sketch up the plan
 
