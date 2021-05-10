@@ -28,7 +28,7 @@ From photos taken by local spotters, the Heron seems to be carrying Israel Aircr
 
 IAI quotes the range as 350 kilometers when in radio communication mode with a ground station and 1,000 kilometers when a satellite is used to relay the signal:
 
-![](HeronRangemap.gif)
+![](images/HeronRangemap.gif)
 
 The subject as to who does the actual "operating" isn't so clear however. [This press release by Airbus](https://www.airbus.com/newsroom/press-releases/en/2020/10/european-border-and-coast-guard-agency-frontex-selects-airbus-and-its-partner-iai-for-maritime-aerial-surveillance-with-remotely-piloted-aircraft-systems-rpas.html) seems to suggest that they set up the ground infrastructure and fly the aircraft, but the Heron has been given a standard AFM Air Wing *ASXXXX* registration, with the first two digits indicating the year of registry (2021) and the last two being the cumulative count of the aircraft (23rd aircraft operated by the Air Wing).
 
