@@ -1,0 +1,284 @@
+---
+title: "Measuring Urban Heat Islands using Sentinel 3"
+author: ''
+date: '2021-06-20'
+slug: urban-heat-islands-sentinel3
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="how-pronounced-are-heat-islands" class="section level2">
+<h2>How Pronounced are Heat Islands?</h2>
+<p>I was inspired <a href="https://www.katiejolly.io/blog/2019-08-28/nyt-urban-heat">by this visualization</a> to create something similar to see the extent of the urban heat island phenomena over the Maltese islands. Unfortunately, there isn’t a city of Washington D.C. equivalent ready to provide us with a calculated raster. I could either use Landsat 8 and try to calculate the Land Surface Temperature using one of the many algorithms devised or work with Sentinel 3 data from the EU’s Copernicus Programme.</p>
+<p>I settled on Sentinel 3 data for a number of reasons:</p>
+<ul>
+<li>both satellites have a dedicated <a href="https://sentinel.esa.int/web/sentinel/technical-guides/sentinel-3-slstr/instrument">Land Surface Temperature instrument</a>.</li>
+<li>ESA pre-processes the data into 1km grids.</li>
+<li>Sentinel 3 measures the surface temperature at both day and night.</li>
+</ul>
+<p>The final point is actually the most important since the urban heat island effect is more pronounced at night than during the day.</p>
+<p>I downloaded the data from <a href="https://scihub.copernicus.eu/dhus/">Copernicus Open Hub</a> (if you’re interested in doing this yourself, all services are completely free, you will just need to create an account to get started), and picked a night with no wind. The data is in NetCDF format, so we’ll use the the <code>ncdf4</code> library to wrangle it.</p>
+<p>The most important files in the folder for us are:</p>
+<ul>
+<li><p><code>LST_in.nc</code> which is where we’ll get the actual LST values in Kelvin for each 1x1km grid</p></li>
+<li><p><code>geodetic_in.nc</code> which contain the latitude and longitude of each of those 1x1km grid</p></li>
+</ul>
+<p>In reality it look me a bit longer than it probably should have that _in files go together, but getting the coordinates is important because unlike for instance Landsat rasters, these grids are transposed and often upside down (more on those struggles below).</p>
+<pre class="r"><code>#Loading libraries. 
+library(ncdf4)
+library(tidyverse)
+library(raster)
+library(giscoR)
+library(gstat)
+library(viridis)
+
+wd &lt;- where_files_are
+
+#creating filepath names
+climate_filepath &lt;- paste0(wd, &quot;/LST_in.nc&quot;)
+cart_filepath &lt;- paste0(wd, &quot;/geodetic_in.nc&quot;)
+
+#reading them in using nc_open
+nc &lt;- nc_open(climate_filepath)
+cord &lt;-  nc_open(cart_filepath)</code></pre>
+<p>All three files are a 1200 x 1500 cell matrix. Since I had a LST value, and coordinates for each cell, I collapsed the matrix, and binded them all into a dataframe:</p>
+<pre class="r"><code>lat &lt;-  ncvar_get(cord, &quot;latitude_in&quot;) %&gt;% as.vector()
+lon &lt;-  ncvar_get(cord, &quot;longitude_in&quot;) %&gt;% as.vector()
+LST &lt;-  ncvar_get(nc, &quot;LST&quot;) %&gt;% as.vector()
+
+LST_DF = data.frame(lon = lon,
+                 lat = lat,
+                 LST = LST) %&gt;%
+  #Filter only for Malta
+  filter(lat &gt;= 35.7 &amp; lat &lt;=36.1 &amp; lon &gt;= 14.1 &amp; lon &lt;=14.6) %&gt;% 
+  #Remove NA (sea temp) values
+  drop_na() %&gt;% 
+  #Convert from Kelvin to C
+  mutate(LST = LST - 273.15)</code></pre>
+<p>Now ordinarily this would be it. I would just plot the data frame. But for some reason, that 1x1km non-standard grid was giving <code>geom_raster</code> some trouble, and the best I could do was a point plot. Frankly, I wanted something more pretty.</p>
+<pre class="r"><code>ggplot(LST_DF, aes(x = lon, y = lat, col = LST))+
+  geom_point()+
+  scale_color_viridis()+
+  theme_bw()</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-4-1.png" width="672" /></p>
+<p>The best way I found to fix this was to create a grid from scratch, at a much finer in resolution, then use some spatial statistics to project what the temperature would have of been at those values using the surrounding observations. Mostly I recreated <a href="https://rstudio-pubs-static.s3.amazonaws.com/46259_d328295794034414944deea60552a942.html">this post</a>.</p>
+<p>First step was to cast the data frame into a spatial points data frame, and create our artificial grid:</p>
+<pre class="r"><code>coordinates(LST_DF) &lt;-  ~lon+lat
+
+y.range &lt;- as.double(c(35.75,36.15))
+x.range &lt;- as.double(c(14.1,14.62))
+
+grid &lt;- expand.grid(x=seq(from=x.range[1], 
+                         to=x.range[2], by=0.00130), #by = x max - x min/500
+                   y=seq(from=y.range[1], 
+                         to=y.range[2], by=0.00101))
+
+coordinates(grid)  &lt;- ~x+y
+gridded(grid) &lt;- TRUE</code></pre>
+<p>The above created the below grid, and we’ll use the blue observations to fill in what the predicted ones on the grid would be (essentially smoothing them out).</p>
+<pre class="r"><code>plot(grid)
+points(LST_DF, col = &quot;blue&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+<p>To do this, we’ll use a rather simple inverse distance weighting interpolation method:</p>
+<pre class="r"><code>idw_grid &lt;- gstat::idw(formula = LST ~ 1, 
+          locations = LST_DF, 
+          newdata = grid,
+          idp=3.0) %&gt;% 
+  as.data.frame() %&gt;% 
+  dplyr::select(-var1.var) %&gt;% 
+  rename(lon = x, lat = y, lst = var1.pred) </code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<p>Now this is much closer to what I actually want. I could plot this and call it a day, but there’s another problem. The sea temperature has been interpolated, using land values. This is almost certainly too high and wrong:</p>
+<pre class="r"><code>ggplot(idw_grid, aes(x = lon, y = lat, fill = lst))+
+  geom_raster()+
+  scale_fill_viridis()</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-8-1.png" width="672" /></p>
+<p>I need a mask! But masks are raster operations not data frame ones. <em>Oy Vey.</em> Luckily <code>raster</code> has a function to rasterize any x,y,z table. I’ll then use a shapefile of the Maltese islands as an inverse mask, before converting back to a data frame (I’m certain there’s a better way to do this).</p>
+<pre class="r"><code>#Shapefile
+mt &lt;- gisco_get_countries(resolution = &quot;01&quot;, country = &quot;MLT&quot;)
+
+#Convert to raster, apply mask, then convert back to data frame.
+idw_raster &lt;- idw_grid %&gt;% 
+  rasterFromXYZ() %&gt;% 
+  mask(mt, inverse = FALSE) %&gt;% 
+  as.data.frame(xy = TRUE)</code></pre>
+<p>Aaaand, we plot it, using the appropriately named “inferno” colour scale from viridis!</p>
+<pre class="r"><code>ggplot()+
+  geom_sf(data = mt)+
+  geom_raster(data = idw_raster, 
+              aes(x=x, y=y, fill = lst), 
+              interpolate = T,
+              alpha = .7)+
+  scale_fill_viridis_c(option = &quot;inferno&quot;)+
+  coord_sf()+
+  theme_bw()+
+  ylab(&quot;Latitude&quot;)+
+  xlab(&quot;Longitude&quot;)+
+  labs(title = &quot;Land Surface Temperature&quot;,
+       subtitle = &quot;As Observed by Sentinel 3B on 16th June 2021 at 11 p.m&quot;)+ 
+  guides(fill=guide_legend(title=&quot;°Celsius&quot;))</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-10-1.png" width="720" /></p>
+<p>As one would expect, the effect is mostly prominent in the heavily urbanized corridor spanning Valletta-Floriana-Hamrun-Birkirkara-Msida-ta’ Xbiex-Sliema, with these areas being 2-3° warmer than their surroundings. Another spot is the urbanized area surrounding Marsaxlokk bay, with Birzebbuga and Marsaxlokk standing out from their surroundings.</p>
+<p>The coolest areas are in Western Malta and Western Gozo. There’s also a “mini” urban island in Bugibba, and a lesser 1-2° effect in the Mosta-Naxxar and Victoria areas.</p>
+<p>From the bit I’ve read, urban heat islands peak in summer and winter and mellow out in spring/autumn. Let’s plot a bit more days and see how it varies. I’ve wrapped the above into two functions, <code>get_data_from_sentinel</code> which takes a file location and does all the pre-processing returning the interpolated data frame and <code>plot_sentinel_from_idw_df</code> which plots them in this standardized format.</p>
+<pre class="r"><code>get_data_from_sentinel &lt;- function(wd,
+                                   ymin = 35.64926,
+                                   ymax = 36.15681,
+                                   xmin = 14.08218,
+                                   xmax = 14.73441,
+                                   grids = 500){
+  
+  # Loads &amp; pre-processes SL_2_LST data into data frame ready for plotting.
+  #More info on data: https://sentinels.copernicus.eu/web/sentinel/user-guides/Sentinel-3-slstr/product-types/level-2-lst
+  # 
+  #       :param wd(str): working directory of downloaded folder
+  #       :param ymin(dbl): lower latitude limit for bounding box
+  #       :param ymax(dbl): upper latitude limit for bounding box
+  #       :param xmin(dbl): lower longitude limit for bounding box
+  #       :param xmin(dbl): upper longitude limit for bounding box
+  #       :param grids(int): number of grids IDW should project to
+
+  #       :return idw_raster (dataframe): interpolated data frame with temp in C
+
+  climate_filepath &lt;- paste0(wd, &quot;/LST_in.nc&quot;)
+  cart_filepath &lt;- paste0(wd, &quot;/geodetic_in.nc&quot;)
+  
+  nc &lt;- nc_open(climate_filepath)
+  cord &lt;-  nc_open(cart_filepath)
+
+  mt &lt;- gisco_get_countries(resolution = &quot;01&quot;, country = &quot;MLT&quot;)
+  
+  lat &lt;-  ncvar_get(cord, &quot;latitude_in&quot;) %&gt;% as.vector()
+  lon &lt;-  ncvar_get(cord, &quot;longitude_in&quot;) %&gt;% as.vector()
+  LST &lt;-  ncvar_get(nc, &quot;LST&quot;) %&gt;% as.vector()
+  
+  LST_DF = data.frame(lon = lon,
+                   lat = lat,
+                   LST = LST) %&gt;% 
+    filter(lat &gt;= ymin &amp; lat &lt;=ymax &amp; lon &gt;= xmin &amp; lon &lt;=xmax) %&gt;% 
+    drop_na() %&gt;% 
+    mutate(LST = LST - 273.15)
+  
+  coordinates(LST_DF) &lt;-  ~lon+lat
+
+  y.range &lt;- as.double(c(ymin, ymax))
+  x.range &lt;- as.double(c(xmin, xmax))
+  
+  grd &lt;- expand.grid(x=seq(from=x.range[1], 
+                           to=x.range[2], by=(xmax - xmin)/grids), #0.003
+                     y=seq(from=y.range[1], 
+                           to=y.range[2], by=(ymax - ymin)/grids)) #0.0025
+  
+  coordinates(grd)  &lt;- ~x+y
+  gridded(grd) &lt;- TRUE
+  
+  idw_grid &lt;- gstat::idw(formula = LST ~ 1, 
+            locations = LST_DF, 
+            newdata = grd,
+            idp=3.0) %&gt;% 
+    as.data.frame() %&gt;% 
+    dplyr::select(-var1.var) %&gt;% 
+    rename(lon = x, lat = y, lst = var1.pred) 
+  
+  idw_raster &lt;- idw_grid %&gt;% 
+    rasterFromXYZ() %&gt;% 
+    mask(mt, inverse = FALSE) %&gt;% 
+    as.data.frame(xy = TRUE)
+  
+  
+  return(idw_raster)
+}
+
+plot_sentinel_from_idw_df &lt;- function(df, 
+                                      sub = &quot;&quot;){
+  
+  # Plots data frame provided from get_data_from_sentinel function
+  # 
+  #       :param df(df): data frame
+  #       :param sub(character): subtitle for graph
+  
+  #       :return ggplot object
+  
+  mt &lt;- gisco_get_countries(resolution = &quot;01&quot;, country = &quot;MLT&quot;)
+
+  ggplot()+
+  geom_sf(data = mt)+
+  geom_raster(data = df, 
+              aes(x=x, y=y, fill = lst), 
+              interpolate = T,
+              alpha = .7)+
+  scale_fill_viridis_c(option = &quot;inferno&quot;)+
+  coord_sf()+
+  theme_bw()+
+  ylab(&quot;Latitude&quot;)+
+  xlab(&quot;Longitude&quot;)+
+  labs(title = &quot;Land Surface Temperature&quot;,
+       subtitle = sub)+ 
+  guides(fill=guide_legend(title=&quot;°Celsius&quot;))}</code></pre>
+<p>The above allows us to streamline the process greatly, since any plot is now a download and two function calls away.</p>
+<pre class="r"><code>p1 &lt;- get_data_from_sentinel(Aug2020) %&gt;% 
+  plot_sentinel_from_idw_df(
+    sub = &quot;13th August 2020 at 11 p.m&quot;)+
+  theme_void()</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre class="r"><code>p2 &lt;- get_data_from_sentinel(Feb2021) %&gt;% 
+  plot_sentinel_from_idw_df(
+    sub = &quot;5th Feb 2021 at 11 p.m&quot;)+
+  theme_void()</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre class="r"><code>p3 &lt;- get_data_from_sentinel(Mar2021) %&gt;% 
+  plot_sentinel_from_idw_df(
+    sub = &quot;21st March 2021 at 11 p.m&quot;)+ 
+  theme_void()</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre class="r"><code>p4 &lt;- get_data_from_sentinel(Jun2021) %&gt;% 
+  plot_sentinel_from_idw_df(
+    sub = &quot;14th June 2021 at 11 p.m&quot;)+ 
+  theme_void()</code></pre>
+<pre><code>## [inverse distance weighted interpolation]</code></pre>
+<pre class="r"><code>library(patchwork)
+
+(p1 | p2) / (p3 | p4)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-13-1.png" width="672" /></p>
+<p>I <em>think</em> the abnormally cool values on the 21st of March over Mellieha are due to clouds over those pixels. If we were doing actual science, we’d probably mask those cloudy pixels in the same way we did the sea.</p>
+</div>
+<div id="struggling-with-raster-conversion" class="section level2">
+<h2>Struggling with Raster Conversion</h2>
+<p>Before coming up with the above workflow, I struggled a bit with converting the data to raster form. I tried the usual approach, with min and max bounds for both the x and y axis coming from the long/lat data, and using the crs specified in the metadata.</p>
+<pre class="r"><code>LST_matrix = ncvar_get(nc, &quot;LST&quot;) 
+
+
+r_exp &lt;- raster(t(LST_matrix), 
+            xmn=min(lon), 
+            xmx=max(lon), 
+            ymn=min(lat), 
+            ymx=max(lat), 
+            crs=CRS(&quot;+init=EPSG:4326&quot;))
+
+plot(r_exp)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p>Which on first glance seems to work, only requiring us to do two flips to the data (note that we’ve already had to transpose the matrix on it’s diagonal using the <code>t()</code> matrix function in R).</p>
+<pre class="r"><code>r_exp &lt;- flip(r_exp, direction = &quot;y&quot;)
+r_exp &lt;- flip(r_exp, direction = &quot;x&quot;)
+plot(r_exp)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-15-1.png" width="672" /></p>
+<p>Seems fixed right? That’s what I thought, until I started trying to subset the data. Tunisia is weirdly out of shape, the Balearic islands seem an hours swim from here and the 36th parallel north in our plot passes through the southern tip of Sicily. In reality, it splits Gozo from Malta. Why this was happening only became apparent in <a href="https://gis.stackexchange.com/questions/313974/extract-sentinel-3-data-into-raster-in-r">this stack exchange post.</a> If we plot a scatter graph of lat/lon points:</p>
+<pre class="r"><code>plot(lon, lat)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+<p>The grid hasn’t been projected onto a flat surface for us, it’s still in a spherical form. By trying to stretch it into a rectangle (essentially make the black part fit the white square), we were distorting it!</p>
+<div id="references" class="section level3">
+<h3>References</h3>
+<ul>
+<li><a href="https://rstudio-pubs-static.s3.amazonaws.com/46259_d328295794034414944deea60552a942.html">Surface Interpolation in R.</a></li>
+<li><a href="https://spacetimewithr.org/"><strong>Spatio-Temporal Statistics with R By Wikle, Zammit-Mangion, and Cressie.</strong></a> (for more depth on the IDW method)</li>
+<li><a href="katiejolly.io/blog/2019-08-28/nyt-urban-heat">NYT-style urban heat island maps.</a></li>
+<li><a href="https://www.youtube.com/watch?v=5UHghHjP6ZQ">Copernicus Webinar on using Sentinel 3 data for UHI.</a></li>
+<li><a href="https://rpubs.com/boyerag/297592">How to open and work with NetCDF data in R by Alison Boyer.</a></li>
+</ul>
+</div>
+</div>
