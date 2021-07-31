@@ -1,0 +1,456 @@
+---
+title: "Deepdiving into Survey Methodology and that new ToM Poll"
+author: ''
+date: '2021-07-31'
+slug: surveys-deepdive
+categories: []
+tags: []
+type: ''
+subtitle: ''
+image: ''
+---
+
+
+
+<div id="new-esprimi-poll" class="section level2">
+<h2>New Esprimi Poll</h2>
+<p>Times of Malta/Esprimi came out <a href="https://timesofmalta.com/articles/view/labour-leading-pn-by-more-than-50000-votes-survey.888817">with a new poll last weekend with some newer methodology than we’re used to.</a> Though I have a feeling it largely made the rounds and captured the imagination of many because it bumped up the “40,000 lead” net figure to “50,000”. Percentage wise however, we’re bang on to other recent polls, in the 41% range for PN and 58% range for PL.</p>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-1-1.png" width="672" /></p>
+<p>If you’re really pedantic, <a href="https://www.maltatoday.com.mt/news/data_and_surveys/110842/maltatoday_survey__pn_chips_away_at_labour_lead_but_gap_stands_at_39000_votes#.YQQEzI4zY2w">it’s actually a 0.5% improvement for PN from this MT poll around 3 weeks ago</a>, and the emphasis on “number of votes” as opposed to % margin makes zero sense, but for many people it’s a bit like money at this stage: the more trailing zeros, the more excited they get.</p>
+</div>
+<div id="non-replies-issue" class="section level2">
+<h2>Non Replies Issue</h2>
+<p>What it should really have of made the news about was on how differently it handled “no answer” responses. In European style polling, we usually readjust the denominator to the vote intention we have responses to, and rework that as a percentage out of 100 - implicitly assuming that the “no answers” are split along the same lines as the people that were vocal about it.</p>
+<p>This is a fairly reasonable assumption unless you have reason to believe that the missingness is not at random but perhaps due to some sort of social desirability bias where supporters of an unorthodox party assess that their support is socially undesirable in the broader population.</p>
+<p><em>(As a slight tangent, I said “European” style because in the US it’s perfectly normal to report a 40%-50% split as a ‘10 point lead’. In many ways this is actually a much more mature way to think about it.)</em></p>
+<p>What Esprimi and Lobeslab have done is a step further: running a classification model on their responses and predicting the “no answer” category’s likely support.</p>
+<p>In theory this approach should give similar results to weighing if the survey is properly designed, but I can see it possibly being a safeguard against some sort of survey wide bias. The catch here is however that this “bias” needs to be accounted for by some signal in the features (socially desirable non-responses are explained by for example location, to keep with the example) for machine learning techniques to pick it up.</p>
+<p>The proof however, is always in practice.</p>
+</div>
+<div id="setting-up-our-experiment" class="section level2">
+<h2>Setting up our Experiment</h2>
+<p>If we synthetically create a population, and simulate sampling it just like a survey might, we can analyze the responses using traditional weighting vs. the machine learning approach. This would let us see if there is a meaningful difference of the estimated population values from the sample anf the true population value from our generated population.</p>
+<p>Firstly, let’s write a function to generate our synthetic population:</p>
+<pre class="r"><code>create_population &lt;- function(N = 500000,
+                              blueberry_bias_age = 0,
+                              blueberry_bias_location = 0){
+  # Creates a sample population of blueberry &amp; watermelon support
+  # 
+  #       :param N(int): population size
+  #       :param blueberry_bias_age(float): the bias in blueberry support according to age.
+  #       :param blueberry_bias_location(float): bias in blueberry support according to location.
+
+  #       :return (dataframe): composed of the synthetic population
+
+set.seed(123)
+
+  age_values &lt;- c(&#39;18-30&#39;, &#39;31-45&#39;, 
+                  &#39;46-55&#39;, &#39;56-65&#39;, &#39;65+&#39;)
+  age_probabilities &lt;- c(0.13, 0.25, 0.15, 0.3, 0.17)
+  
+  region_value &lt;- c(&#39;Gozitan Republic&#39;, &#39;Malta North&#39;, 
+                    &#39;Malta West&#39;, &#39;Malta East&#39;, &#39;Malta South&#39;)
+  region_probabilities &lt;- c(0.1, 0.32, 0.1, 0.15, 0.33)
+  
+  population &lt;- tibble(age = sample(age_values,
+                                    N,
+                                    prob = age_probabilities,
+                                    replace = TRUE),
+                       region = sample(region_value, 
+                                       N,
+                                       prob = region_probabilities,
+                                       replace = TRUE)) %&gt;% 
+    mutate(preference = runif(nrow(.)),
+           vote = case_when(age == &#39;18-30&#39; ~ preference + (blueberry_bias_age * 1.2),
+                            age == &#39;31-45&#39; ~ preference + (blueberry_bias_age * 1),
+                            age == &#39;46-55&#39; ~ preference,
+                            age == &#39;56-65&#39; ~ preference - (blueberry_bias_age * 1),
+                            age == &#39;65+&#39; ~ preference - (blueberry_bias_age * 1.5)),
+           vote = case_when(region == &quot;Malta North&quot; ~ vote - blueberry_bias_location,
+                            region == &quot;Malta South&quot; ~ vote + blueberry_bias_location,
+                            TRUE ~ vote),
+           vote = if_else(vote &lt; 0.5, &quot;Blueberry&quot;, &quot;Watermelon&quot;)) %&gt;%
+    rowwise() %&gt;% 
+    mutate(occupation = if_else(vote == &quot;Blueberry&quot;, 
+                                sample(c(&quot;Farmer&quot;, 
+                                         &quot;Office Work&quot;, 
+                                         &quot;Healthcare&quot;, 
+                                         &quot;Law Enforcment&quot;, 
+                                         &quot;Bitcoin Trader&quot;,
+                                         &quot;Other&quot;),
+                                       1,
+                                       replace = T,
+                                       c(0.19, 0.16, 0.16, 0.16, 0.16, 0.17)),
+                                sample(c(&quot;Farmer&quot;, 
+                                         &quot;Office Work&quot;, 
+                                         &quot;Healthcare&quot;, 
+                                         &quot;Law Enforcment&quot;, 
+                                         &quot;Bitcoin Trader&quot;,
+                                         &quot;Other&quot;),
+                                       1,
+                                       replace = T,
+                                       c(0.16, 0.17, 0.16, 0.16, 0.19, 0.16))),
+           has_car = sample(c(&quot;Yes&quot;, &quot;No&quot;), 1, replace = T, c(0.5, 0.5))) %&gt;%
+    ungroup() %&gt;% 
+    select(c(&quot;age&quot;, &quot;region&quot;, &quot;occupation&quot;, &quot;has_car&quot;, &quot;vote&quot;))
+}</code></pre>
+<p><code>create_population</code> creates a Malta in an alternate reality, that’s exactly 500,000 people strong. Because this is in an alternate timeline, Gozo has achieved Republic status, but maintains strong social and economic ties with Malta. This is split into 4 regions, using the actual compass this time: North, West, East and South.</p>
+<p>Rather than support for political parties, we’ll be measuring the nation’s favorite fruit: blueberry or watermelon. The <code>blueberry_bias_age</code> variable is important. If left to 0, the function will generate a random amount of support for both fruits. Over half a million rows, this will work out to nearly 50-50.</p>
+<p>If tweaked with a positive value however, it will apply a bias in support, making blueberry less popular with younger groups, and more popular with older groups. If we want it to go another way, we can just apply a negative value.</p>
+<p>Similarly, <code>blueberry_bias_location</code> works in much the same way, however in this case the bias is only applied to the Northern and Southern Malta regions.</p>
+<p>To add some more predicting power, I created an occupation variable that’s slightly more farmer than chance if you like blueberries, and slightly more bitcoin trader if you like watermelons. The other has_car variable is just some random noise.</p>
+</div>
+<div id="creating-alternate-malta" class="section level2">
+<h2>Creating Alternate Malta</h2>
+<p>All that’s left for us to create this alternate reality is to run the function!</p>
+<pre class="r"><code>set.seed(123)
+
+malta_v2 &lt;- create_population(blueberry_bias_age = 0.1, 
+                              blueberry_bias_location = 0.05)</code></pre>
+<p>Here, I’ll be biasing blueberry just a nudge with age (blueberry increases in popularity with age) and location (people in the north like to sprinkle them in yogurt for breakfast).</p>
+<p>Anyway, the alternate Malta NSO’s latest census shows the population is comprised of:</p>
+<pre class="r"><code>census &lt;- malta_v2 %&gt;% 
+  group_by(age, region, occupation, has_car) %&gt;% 
+  tally()
+
+census</code></pre>
+<pre><code>## # A tibble: 300 x 5
+## # Groups:   age, region, occupation [150]
+##    age   region           occupation     has_car     n
+##    &lt;chr&gt; &lt;chr&gt;            &lt;chr&gt;          &lt;chr&gt;   &lt;int&gt;
+##  1 18-30 Gozitan Republic Bitcoin Trader No        612
+##  2 18-30 Gozitan Republic Bitcoin Trader Yes       582
+##  3 18-30 Gozitan Republic Farmer         No        539
+##  4 18-30 Gozitan Republic Farmer         Yes       586
+##  5 18-30 Gozitan Republic Healthcare     No        516
+##  6 18-30 Gozitan Republic Healthcare     Yes       520
+##  7 18-30 Gozitan Republic Law Enforcment No        518
+##  8 18-30 Gozitan Republic Law Enforcment Yes       540
+##  9 18-30 Gozitan Republic Office Work    No        527
+## 10 18-30 Gozitan Republic Office Work    Yes       541
+## # ... with 290 more rows</code></pre>
+<p>This is important because we’ll use this census to weigh our survey. Since we’re on the subject, here’s what the true support of blueberry vs. watermelon is <strong>in the population</strong>:</p>
+<pre class="r"><code>malta_v2 %&gt;% 
+  group_by(vote) %&gt;% 
+  summarise(n(), percent = n()/500000)</code></pre>
+<pre><code>## # A tibble: 2 x 3
+##   vote        `n()` percent
+##   &lt;chr&gt;       &lt;int&gt;   &lt;dbl&gt;
+## 1 Blueberry  257031   0.514
+## 2 Watermelon 242969   0.486</code></pre>
+<p>And here’s the interaction by age and region:</p>
+<pre class="r"><code>malta_v2 %&gt;% 
+  mutate(likes_blueberry = if_else(vote == &quot;Blueberry&quot;, 1, 0)) %&gt;% 
+  group_by(age, region) %&gt;% 
+  summarise(blueberry_support = mean(likes_blueberry)) %&gt;% 
+  ggplot(aes(x = region, y = blueberry_support, fill = age))+
+  geom_col(position = &quot;dodge&quot;)+
+  coord_flip()+ 
+  scale_y_continuous(labels = scales::percent)+
+  theme_bw()+
+  ylab(&quot;Blueberry Support&quot;)+
+  xlab(&quot;&quot;)</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-6-1.png" width="672" /></p>
+</div>
+<div id="our-survey" class="section level2">
+<h2>Our Survey</h2>
+<p>Similarly, we’ll wrap our survey in a function named <code>survey_population</code>.</p>
+<pre class="r"><code>survey_population &lt;- function(population_df,
+                              n = 600,
+                              perc_shy = 0.1) {
+  
+  # Surveys the population randomly just like a phone survey might
+  # 
+  #       :param population_df(dataframe): a population dataframe created using the create_population function.
+  #       :param n(int): sample size
+  #       :param perc_shy(float): the percentage of survey responses that will have &#39;no answer&#39;
+
+  #       :return (dataframe): the survey results
+set.seed(234)
+sample_n(population_df, replace = F, size = n) %&gt;%
+mutate(vote =  replace(vote, 
+                       sample(row_number(),
+                              size = ceiling(perc_shy * n()),
+                              replace = FALSE),
+                       NA))
+  }</code></pre>
+<p>The <code>sample</code> package’s <code>sample_n</code> actually does most of the heavy lifting here, but I added a line in a mutate call that randomly replaces the watermelon/blueberry value with an NA to simulate a stipulated percent of missing values. MaltaToday reports around 12-15% of “Don’t Knows”, so we’ll go with 15%, and generate a simulated survey of 600 people.</p>
+<pre class="r"><code>survey &lt;- survey_population(malta_v2, n = 600, perc_shy = 0.15)</code></pre>
+<p>This is what we get:</p>
+<pre class="r"><code>survey %&gt;% head()</code></pre>
+<pre><code>##     age      region     occupation has_car       vote
+## 1 31-45 Malta North         Farmer      No Watermelon
+## 2 18-30  Malta East Bitcoin Trader     Yes  Blueberry
+## 3 31-45 Malta South     Healthcare     Yes Watermelon
+## 4   65+ Malta North Law Enforcment     Yes       &lt;NA&gt;
+## 5 56-65 Malta South          Other      No  Blueberry
+## 6 31-45 Malta North Bitcoin Trader      No       &lt;NA&gt;</code></pre>
+<p>And this is the picture our raw crosstabs paint:</p>
+<pre class="r"><code>survey %&gt;% 
+  group_by(vote) %&gt;% 
+  summarise(n(), n()/600)</code></pre>
+<pre><code>## # A tibble: 3 x 3
+##   vote       `n()` `n()/600`
+##   &lt;chr&gt;      &lt;int&gt;     &lt;dbl&gt;
+## 1 Blueberry    254     0.423
+## 2 Watermelon   256     0.427
+## 3 &lt;NA&gt;          90     0.15</code></pre>
+<p>Excitingly, due to the magic of randomness, watermelon is leading!</p>
+</div>
+<div id="traditional-surveys" class="section level2">
+<h2>Traditional Surveys</h2>
+<p>The <code>survey</code> package is a tremendous resource in R for analysis. To make our lives easier, let’s join the census data to the survey. The <strong>pw</strong> column simply contains the number of that demographic group present in the population, while the <strong>fpc</strong> is the finite population correction, which we set to our 500,000 inhabitants.</p>
+<pre class="r"><code>library(survey)
+
+survey_w_weights &lt;- survey %&gt;% 
+  inner_join(census) %&gt;% 
+  rename(pw = n) %&gt;% 
+  mutate(fpc = 500000)
+
+survey_w_weights %&gt;% head()</code></pre>
+<pre><code>##     age      region     occupation has_car       vote   pw   fpc
+## 1 31-45 Malta North         Farmer      No Watermelon 3422 5e+05
+## 2 18-30  Malta East Bitcoin Trader     Yes  Blueberry  852 5e+05
+## 3 31-45 Malta South     Healthcare     Yes Watermelon 3327 5e+05
+## 4   65+ Malta North Law Enforcment     Yes       &lt;NA&gt; 2097 5e+05
+## 5 56-65 Malta South          Other      No  Blueberry 4013 5e+05
+## 6 31-45 Malta North Bitcoin Trader      No       &lt;NA&gt; 3553 5e+05</code></pre>
+<p>Then we can create our survey design object, and pass it through the svymean funtion.</p>
+<pre class="r"><code>design &lt;- svydesign(id = ~1, 
+                    weights = ~pw, 
+                    data = survey_w_weights, 
+                    fpc = ~fpc)
+
+svymean(~vote, design, na.rm = T)</code></pre>
+<pre><code>##                   mean     SE
+## voteBlueberry  0.50918 0.0246
+## voteWatermelon 0.49082 0.0246</code></pre>
+<p>And what do you know, already a terrific improvement!</p>
+<p>We’ve corrected the swing, and the true population value is within the standard error.</p>
+</div>
+<div id="classifier-aided" class="section level2">
+<h2>Classifier Aided</h2>
+<p>We can train a classification model on our provided survey responses, and use this to predict on the unknown responses. We’ll try two types of model: XGBoost and logistic regression from the <code>glmnet</code> package.</p>
+<p>Julia Silge also introduced the <code>finetune</code> package <a href="https://www.youtube.com/watch?v=_e0NFIaHY2c">in this video, so I also took this opportunity to give it a try.</a> The pre-processing steps are pretty straight forward (some of it is actually copy pasted from the above video), but we’ll drop the NAs, create our folds, onehot encode all the predictors and give each of the models a 50 parameter grid, before analyzing performance on the unseen test set using the <code>last_fit</code> function.</p>
+<div id="xgboost" class="section level4">
+<h4>XGBoost</h4>
+<pre class="r"><code>library(tidymodels)
+library(finetune)
+
+doParallel::registerDoParallel()
+
+set.seed(123)
+
+raw &lt;- survey %&gt;% 
+  drop_na() %&gt;% 
+  initial_split(0.8)
+
+training &lt;- training(raw)
+testing &lt;- testing(raw)
+
+cv_folds &lt;- vfold_cv(training)
+
+classifying_rec &lt;- recipe(vote ~ .,
+                          data = training) %&gt;% 
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+
+xgb_spec &lt;-
+  boost_tree(
+    trees = 500,
+    min_n = tune(),
+    mtry = tune(),
+    learn_rate = tune()
+  ) %&gt;%
+  set_engine(&quot;xgboost&quot;) %&gt;%
+  set_mode(&quot;classification&quot;)
+
+xgb_wf &lt;- workflow(classifying_rec, xgb_spec)
+
+xgb_rs &lt;- tune_race_anova(
+  xgb_wf,
+  resamples = cv_folds,
+  grid = 50)</code></pre>
+<pre class="r"><code>xgb_last &lt;- xgb_wf %&gt;%
+  finalize_workflow(select_best(xgb_rs)) %&gt;% 
+  last_fit(raw)
+
+xgb_last$.metrics</code></pre>
+<pre><code>## [[1]]
+## # A tibble: 2 x 4
+##   .metric  .estimator .estimate .config             
+##   &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;               
+## 1 accuracy binary         0.480 Preprocessor1_Model1
+## 2 roc_auc  binary         0.530 Preprocessor1_Model1</code></pre>
+</div>
+<div id="glmnet" class="section level4">
+<h4>GLMNet</h4>
+<pre class="r"><code>set.seed(234)
+
+log_reg_spec &lt;- logistic_reg(
+  penalty = tune(),
+  mixture = tune()) %&gt;% 
+  set_mode(&quot;classification&quot;) %&gt;% 
+  set_engine(&quot;glmnet&quot;)
+
+lr_wf &lt;- workflow(classifying_rec, log_reg_spec)
+
+lr_rs &lt;- tune_race_anova(
+  lr_wf,
+  resamples = cv_folds,
+  grid = 50)
+
+lr_last &lt;- lr_wf %&gt;%
+  finalize_workflow(select_best(lr_rs)) %&gt;% 
+  last_fit(raw)
+
+lr_last$.metrics</code></pre>
+<pre><code>## [[1]]
+## # A tibble: 2 x 4
+##   .metric  .estimator .estimate .config             
+##   &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;               
+## 1 accuracy binary         0.520 Preprocessor1_Model1
+## 2 roc_auc  binary         0.543 Preprocessor1_Model1</code></pre>
+<p>Now to be honest, both these models have dreadful performance. It may be entirely due to my synthetic data or something obvious I missed. But since the logistic classifier is a smudge better, let’s use that to predict the “unknowns” present in the survey.</p>
+<pre class="r"><code>lr_preds &lt;- lr_wf %&gt;%
+  finalize_workflow(select_best(lr_rs)) %&gt;% 
+  fit(training) %&gt;% 
+  predict(survey)
+
+survey_model_assist &lt;- survey %&gt;% 
+  bind_cols(lr_preds) %&gt;% 
+  mutate(vote = case_when(is.na(vote)~ as.character(.pred_class),
+                          TRUE ~ vote))</code></pre>
+</div>
+<div id="raw" class="section level3">
+<h3>Raw</h3>
+<p>How well did it improve things from the raw results?</p>
+<pre class="r"><code>survey_model_assist %&gt;% 
+  group_by(vote) %&gt;% 
+  summarise(n(), n()/600)</code></pre>
+<pre><code>## # A tibble: 2 x 3
+##   vote       `n()` `n()/600`
+##   &lt;chr&gt;      &lt;int&gt;     &lt;dbl&gt;
+## 1 Blueberry    298     0.497
+## 2 Watermelon   302     0.503</code></pre>
+<p>It swung 0.1% the wrong way.</p>
+</div>
+<div id="as-an-input-to-a-weighted-survey" class="section level3">
+<h3>As an Input to a Weighted Survey</h3>
+<p>But if we use that raw survey as the input to the usual weighing process…</p>
+<pre class="r"><code>survey_model_assist &lt;- survey_model_assist %&gt;% 
+  inner_join(census) %&gt;% 
+  rename(pw = n) %&gt;% 
+  mutate(fpc = 500000) </code></pre>
+<pre><code>## Joining, by = c(&quot;age&quot;, &quot;region&quot;, &quot;occupation&quot;, &quot;has_car&quot;)</code></pre>
+<pre class="r"><code>design_2 &lt;- svydesign(id = ~1, 
+                    weights = ~pw, 
+                    data = survey_model_assist, 
+                    fpc = ~fpc)
+
+svymean(~vote, design_2, na.rm = T)</code></pre>
+<pre><code>##                  mean     SE
+## voteBlueberry  0.5176 0.0227
+## voteWatermelon 0.4824 0.0227</code></pre>
+<p>That’s actually the closest result of the lot. Obviously, the better work you do on the classification model, the better your result will look.</p>
+</div>
+</div>
+<div id="summarizing-it" class="section level2">
+<h2>Summarizing It</h2>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-21-1.png" width="672" /></p>
+</div>
+<div id="what-if-the-effect-was-systemic" class="section level2">
+<h2>What if the Effect was systemic?</h2>
+<p>There’s one case where the ML approach might actually make a huge difference: if the missingness was not at random. To simulate this, I set the shyness to 0 (we get no NAs), order our table so the same categories are clustered together, and just chop off a bunch of let’s say, <a href="https://en.wikipedia.org/wiki/Shy_Tory_factor">shy watermelon fans.</a></p>
+<pre class="r"><code>survey_biased &lt;- survey_population(malta_v2, n = 600, perc_shy = 0) %&gt;% 
+  arrange(vote, region, age) %&gt;% 
+  head(510)</code></pre>
+<pre class="r"><code>survey_biased %&gt;% 
+  group_by(vote) %&gt;% 
+  summarise(n()/510)</code></pre>
+<pre><code>## # A tibble: 2 x 2
+##   vote       `n()/510`
+##   &lt;chr&gt;          &lt;dbl&gt;
+## 1 Blueberry      0.573
+## 2 Watermelon     0.427</code></pre>
+<p>Yikers. Now let’s do the same things.</p>
+<pre class="r"><code>survey_w_weights_2 &lt;- survey_biased %&gt;% 
+  inner_join(census) %&gt;% 
+  rename(pw = n) %&gt;% 
+  mutate(fpc = 500000)</code></pre>
+<pre><code>## Joining, by = c(&quot;age&quot;, &quot;region&quot;, &quot;occupation&quot;, &quot;has_car&quot;)</code></pre>
+<pre class="r"><code>design &lt;- svydesign(id = ~1, 
+                    weights = ~pw, 
+                    data = survey_w_weights_2, 
+                    fpc = ~fpc)
+
+svymean(~vote, design, na.rm = T)</code></pre>
+<pre><code>##                   mean     SE
+## voteBlueberry  0.60069 0.0239
+## voteWatermelon 0.39931 0.0239</code></pre>
+<p>In this case we can see that the weighing is way off. Pollsters will actually determine minimum respondents for each cell, but if it’s a systemic issue, some of those cells will remain empty.</p>
+<pre class="r"><code>set.seed(123)
+
+log_reg_spec &lt;- logistic_reg(
+  penalty = tune(),
+  mixture = tune()) %&gt;% 
+  set_mode(&quot;classification&quot;) %&gt;% 
+  set_engine(&quot;glmnet&quot;)
+
+lr_wf &lt;- workflow(classifying_rec, log_reg_spec)
+
+lr_rs &lt;- tune_race_anova(
+  lr_wf,
+  resamples = cv_folds,
+  grid = 50)
+
+lr_last &lt;- lr_wf %&gt;%
+  finalize_workflow(select_best(lr_rs)) %&gt;% 
+  last_fit(raw)</code></pre>
+<pre><code>## Warning: No value of `metric` was given; metric &#39;roc_auc&#39; will be used.</code></pre>
+<pre class="r"><code>lr_last$.metrics</code></pre>
+<pre><code>## [[1]]
+## # A tibble: 2 x 4
+##   .metric  .estimator .estimate .config             
+##   &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;               
+## 1 accuracy binary         0.520 Preprocessor1_Model1
+## 2 roc_auc  binary         0.555 Preprocessor1_Model1</code></pre>
+<p>Interestingly, the logistic regression model’s performance jumps up: the missingness fit a pattern it’s learnt well.</p>
+<pre class="r"><code>lr_preds &lt;- lr_wf %&gt;%
+  finalize_workflow(select_best(lr_rs)) %&gt;% 
+  fit(training) %&gt;% 
+  predict(survey)</code></pre>
+<pre><code>## Warning: No value of `metric` was given; metric &#39;roc_auc&#39; will be used.</code></pre>
+<pre class="r"><code>survey_model_assist &lt;- survey %&gt;% 
+  bind_cols(lr_preds) %&gt;% 
+  mutate(vote = case_when(is.na(vote)~ as.character(.pred_class),
+                          TRUE ~ vote))</code></pre>
+<p>And in terms of raw and weighted numbers:</p>
+<pre class="r"><code>survey_model_assist %&gt;% 
+  group_by(vote) %&gt;% 
+  summarise(n(), n()/600)</code></pre>
+<pre><code>## # A tibble: 2 x 3
+##   vote       `n()` `n()/600`
+##   &lt;chr&gt;      &lt;int&gt;     &lt;dbl&gt;
+## 1 Blueberry    295     0.492
+## 2 Watermelon   305     0.508</code></pre>
+<pre class="r"><code>survey_model_assist &lt;- survey_model_assist %&gt;% 
+  inner_join(census) %&gt;% 
+  rename(pw = n) %&gt;% 
+  mutate(fpc = 500000) </code></pre>
+<pre><code>## Joining, by = c(&quot;age&quot;, &quot;region&quot;, &quot;occupation&quot;, &quot;has_car&quot;)</code></pre>
+<pre class="r"><code>design_2 &lt;- svydesign(id = ~1, 
+                    weights = ~pw, 
+                    data = survey_model_assist, 
+                    fpc = ~fpc)
+
+svymean(~vote, design_2, na.rm = T)</code></pre>
+<pre><code>##                   mean     SE
+## voteBlueberry  0.50605 0.0228
+## voteWatermelon 0.49395 0.0228</code></pre>
+<p>Pretty cool!</p>
+<p>Obligatory side by side tie-fighter plot for comparison:</p>
+<pre class="r"><code>library(patchwork)
+
+plot_1 / plot_2</code></pre>
+<p><img src="{{< blogdown/postref >}}index.en_files/figure-html/unnamed-chunk-30-1.png" width="672" /></p>
+</div>
