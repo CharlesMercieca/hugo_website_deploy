@@ -390,6 +390,15 @@ svymean(~vote, design, na.rm = T)</code></pre>
 <p>In this case we can see that the weighing is way off. Pollsters will actually determine minimum respondents for each cell, but if it’s a systemic issue, some of those cells will remain empty.</p>
 <pre class="r"><code>set.seed(123)
 
+raw &lt;- survey_biased %&gt;% 
+  drop_na() %&gt;% 
+  initial_split(0.8)
+
+training &lt;- training(raw)
+testing &lt;- testing(raw)
+
+cv_folds &lt;- vfold_cv(training)
+
 log_reg_spec &lt;- logistic_reg(
   penalty = tune(),
   mixture = tune()) %&gt;% 
@@ -412,8 +421,8 @@ lr_last &lt;- lr_wf %&gt;%
 ## # A tibble: 2 x 4
 ##   .metric  .estimator .estimate .config             
 ##   &lt;chr&gt;    &lt;chr&gt;          &lt;dbl&gt; &lt;chr&gt;               
-## 1 accuracy binary         0.520 Preprocessor1_Model1
-## 2 roc_auc  binary         0.555 Preprocessor1_Model1</code></pre>
+## 1 accuracy binary         0.618 Preprocessor1_Model1
+## 2 roc_auc  binary         0.674 Preprocessor1_Model1</code></pre>
 <p>Interestingly, the logistic regression model’s performance jumps up: the missingness fit a pattern it’s learnt well.</p>
 <pre class="r"><code>lr_preds &lt;- lr_wf %&gt;%
   finalize_workflow(select_best(lr_rs)) %&gt;% 
@@ -431,8 +440,8 @@ lr_last &lt;- lr_wf %&gt;%
 <pre><code>## # A tibble: 2 x 3
 ##   vote       `n()` `n()/600`
 ##   &lt;chr&gt;      &lt;int&gt;     &lt;dbl&gt;
-## 1 Blueberry    295     0.492
-## 2 Watermelon   305     0.508</code></pre>
+## 1 Blueberry    313     0.522
+## 2 Watermelon   287     0.478</code></pre>
 <pre class="r"><code>survey_model_assist &lt;- survey_model_assist %&gt;% 
   inner_join(census) %&gt;% 
   rename(pw = n) %&gt;% 
@@ -445,8 +454,8 @@ lr_last &lt;- lr_wf %&gt;%
 
 svymean(~vote, design_2, na.rm = T)</code></pre>
 <pre><code>##                   mean     SE
-## voteBlueberry  0.50605 0.0228
-## voteWatermelon 0.49395 0.0228</code></pre>
+## voteBlueberry  0.53865 0.0227
+## voteWatermelon 0.46135 0.0227</code></pre>
 <p>Pretty cool!</p>
 <p>Obligatory side by side tie-fighter plot for comparison:</p>
 <pre class="r"><code>library(patchwork)

@@ -489,6 +489,15 @@ In this case we can see that the weighing is way off. Pollsters will actually de
 ```{r}
 set.seed(123)
 
+raw <- survey_biased %>% 
+  drop_na() %>% 
+  initial_split(0.8)
+
+training <- training(raw)
+testing <- testing(raw)
+
+cv_folds <- vfold_cv(training)
+
 log_reg_spec <- logistic_reg(
   penalty = tune(),
   mixture = tune()) %>% 
@@ -561,12 +570,12 @@ weighted_2 <- tibble(type = "weighted",
 
 model_raw_2 <- tibble(type = "model_raw", 
                       vote = c("Blueberry", "Watermelon"),
-                      perc = c(0.487, 0.513),
+                      perc = c(0.522, 0.478),
                       se = c(0, 0))
 
 model_weighted_2 <- tibble(type = "model_weighted", 
                       vote = c("Blueberry", "Watermelon"),
-                      perc = c(0.49874, 0.50126),
+                      perc = c(0.53865, 0.46135),
                       se = c(.0228, .0228))
 
 results_2 <- bind_rows(raw_results_2,
